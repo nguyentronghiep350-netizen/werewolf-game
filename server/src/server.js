@@ -47,11 +47,14 @@ app.get('/api/room/:code', (req, res) => {
 });
 
 // Phục vụ frontend nếu đã build
+const serverPublic = path.join(__dirname, '../public');
 const clientDist = path.join(__dirname, '../../client/dist');
-if (fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
+const staticDir = fs.existsSync(serverPublic) ? serverPublic : clientDist;
+
+if (fs.existsSync(staticDir)) {
+  app.use(express.static(staticDir));
   app.get('/{*splat}', (req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
+    res.sendFile(path.join(staticDir, 'index.html'));
   });
 }
 
