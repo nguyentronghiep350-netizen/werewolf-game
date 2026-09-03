@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Users, Bot, Crown, Check, Play, UserPlus, Trash2, Settings, Sliders, Shield, Flame, Eye, FlaskConical, Crosshair, Heart, Laugh, Layers, Copy, QrCode, X, Share2 } from 'lucide-react';
+import { Users, Bot, Crown, Check, Play, UserPlus, Trash2, Settings, Sliders, Shield, Flame, Eye, FlaskConical, Crosshair, Heart, Laugh, Layers, Copy, QrCode, X, Share2, Radio, Volume2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { soundFx } from '../utils/audio';
 import { ROLE_ICONS } from './RoleGuideModal';
 import CustomDeckModal from './CustomDeckModal';
+import ChatBox from './ChatBox';
 
 export default function WaitingRoom({
   roomCode,
@@ -18,6 +19,10 @@ export default function WaitingRoom({
   onStartGame,
   onModeratorAction,
   voiceStates = {},
+  chatMessages = [],
+  onSendMessage,
+  inVoice = false,
+  onJoinVoice,
 }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showCustomDeckModal, setShowCustomDeckModal] = useState(false);
@@ -294,200 +299,255 @@ export default function WaitingRoom({
         </div>
       )}
 
-      {/* Cài đặt phòng (Dành cho Host) */}
-      {showSettings && isHost && (
-        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-amber-400" />
-              CẤU HÌNH VAI TRÒ & THỜI GIAN
-            </h3>
-            <span className="text-xs text-slate-400">
-              Tổng số người chơi hiện tại: <strong className="text-white">{players.length}</strong>
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { id: 'werewolf', name: 'Ma Sói', color: 'text-red-400', min: 1 },
-              { id: 'seer', name: 'Tiên Tri', color: 'text-purple-400', min: 0 },
-              { id: 'bodyguard', name: 'Bảo Vệ', color: 'text-emerald-400', min: 0 },
-              { id: 'witch', name: 'Phù Thủy', color: 'text-pink-400', min: 0 },
-              { id: 'hunter', name: 'Thợ Săn', color: 'text-amber-400', min: 0 },
-              { id: 'cupid', name: 'Thần Tình Yêu', color: 'text-rose-400', min: 0 },
-              { id: 'jester', name: 'Kẻ Chán Đời', color: 'text-violet-400', min: 0 },
-            ].map((r) => {
-              const count = config.roleConfig?.[r.id] || 0;
-              return (
-                <div key={r.id} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60 flex items-center justify-between">
-                  <div>
-                    <span className={`text-xs font-bold ${r.color}`}>{r.name}</span>
-                    <div className="text-lg font-mono font-bold text-white">{count}</div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleRoleCountChange(r.id, -1)}
-                      disabled={count <= r.min}
-                      className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-white font-bold flex items-center justify-center cursor-pointer text-sm"
-                    >
-                      -
-                    </button>
-                    <button
-                      onClick={() => handleRoleCountChange(r.id, 1)}
-                      className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold flex items-center justify-center cursor-pointer text-sm"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
-            <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40">
-              <label className="text-slate-400 block mb-1">Thời gian Ban Đêm</label>
-              <select
-                value={config.nightDuration || 30}
-                onChange={(e) => onUpdateConfig({ nightDuration: Number(e.target.value) })}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white"
-              >
-                <option value={20}>20 giây (Rất nhanh)</option>
-                <option value={30}>30 giây (Chuẩn)</option>
-                <option value={45}>45 giây (Thong thả)</option>
-              </select>
-            </div>
-            <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40">
-              <label className="text-slate-400 block mb-1">Thời gian Thảo Luận Ban Ngày</label>
-              <select
-                value={config.discussionDuration || 45}
-                onChange={(e) => onUpdateConfig({ discussionDuration: Number(e.target.value) })}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white"
-              >
-                <option value={30}>30 giây (Nhanh)</option>
-                <option value={45}>45 giây (Chuẩn)</option>
-                <option value={60}>60 giây (Kỹ lưỡng)</option>
-                <option value={90}>90 giây (Tranh luận dài)</option>
-              </select>
-            </div>
-            <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40">
-              <label className="text-slate-400 block mb-1">Thời gian Bỏ Phiếu Treo Cổ</label>
-              <select
-                value={config.votingDuration || 30}
-                onChange={(e) => onUpdateConfig({ votingDuration: Number(e.target.value) })}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white"
-              >
-                <option value={20}>20 giây</option>
-                <option value={30}>30 giây</option>
-                <option value={45}>45 giây</option>
-              </select>
+      {/* Banner Khuyến Khích Bật Voice Chat */}
+      {!inVoice && (
+        <div className="bg-gradient-to-r from-emerald-950/70 via-slate-900 to-teal-950/70 border border-emerald-500/40 rounded-3xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl p-2 bg-emerald-500/20 rounded-2xl border border-emerald-500/30">🎙️</span>
+            <div>
+              <h4 className="font-bold text-white text-sm">BẠN ĐANG TẮT VOICE CHAT (ĐÀM THOẠI TRỰC TIẾP)</h4>
+              <p className="text-xs text-slate-300">
+                Để nghe thấy bạn bè và nói chuyện trực tiếp, hãy bấm nút bật mic bên cạnh!
+              </p>
             </div>
           </div>
+          <button
+            onClick={() => {
+              soundFx.playClick();
+              if (onJoinVoice) onJoinVoice();
+            }}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-lg shadow-emerald-950/50 shrink-0"
+          >
+            <Radio className="w-4 h-4 text-emerald-200 animate-pulse" />
+            <span>BẬT MIC PHÒNG CHỜ</span>
+          </button>
         </div>
       )}
 
-      {/* Danh sách người chơi trong phòng */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl shadow-xl">
-        <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-400" />
-            <h3 className="font-bold text-white text-base">
-              DANH SÁCH NGƯỜI CHƠI ({players.length}/16)
-            </h3>
-          </div>
-          <span className="text-xs text-slate-400">
-            {players.filter((p) => p.isReady || p.isHost).length}/{players.length} Đã sẵn sàng
-          </span>
-        </div>
+      {/* Main Content Layout: Cột Trái (Người Chơi & Cài Đặt) + Cột Phải (Ô Chat Phòng Chờ) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Cột trái (7/12): Cài đặt + Danh sách người chơi */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Cài đặt phòng (Dành cho Host) */}
+          {showSettings && isHost && (
+            <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-amber-400" />
+                  CẤU HÌNH VAI TRÒ & THỜI GIAN
+                </h3>
+                <span className="text-xs text-slate-400">
+                  Tổng số người chơi: <strong className="text-white">{players.length}</strong>
+                </span>
+              </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {players.map((p) => {
-            const isMe = p.id === myId;
-            return (
-              <div
-                key={p.id}
-                className={`p-3.5 rounded-2xl border transition relative flex items-center justify-between ${
-                  isMe
-                    ? 'bg-slate-800/90 border-indigo-500/80 shadow-md shadow-indigo-950/50'
-                    : 'bg-slate-800/40 border-slate-700/60'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="relative text-3xl p-1 bg-slate-900/80 rounded-xl border border-slate-700/60">
-                    {p.avatar}
-                    {p.isHost && (
-                      <Crown className="w-4 h-4 text-amber-400 absolute -top-1.5 -right-1.5 fill-current" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-white text-sm truncate">{p.name}</span>
-                      {isMe && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-900 text-indigo-300 font-semibold">
-                          Bạn
-                        </span>
-                      )}
-                      {voiceStates[p.id]?.inVoice && (
-                        <span
-                          className={`text-[10px] px-1.5 py-0.2 rounded border font-mono ${
-                            voiceStates[p.id]?.isSpeaking
-                              ? 'bg-emerald-950 text-emerald-300 border-emerald-500 animate-pulse font-bold'
-                              : voiceStates[p.id]?.isMuted
-                              ? 'bg-red-950 text-red-300 border-red-800'
-                              : 'bg-slate-800 text-emerald-400 border-slate-700'
-                          }`}
-                          title={voiceStates[p.id]?.isMuted ? 'Tắt mic' : voiceStates[p.id]?.isSpeaking ? 'Đang nói' : 'Đang trong voice'}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { id: 'werewolf', name: 'Ma Sói', color: 'text-red-400', min: 1 },
+                  { id: 'seer', name: 'Tiên Tri', color: 'text-purple-400', min: 0 },
+                  { id: 'bodyguard', name: 'Bảo Vệ', color: 'text-emerald-400', min: 0 },
+                  { id: 'witch', name: 'Phù Thủy', color: 'text-pink-400', min: 0 },
+                  { id: 'hunter', name: 'Thợ Săn', color: 'text-amber-400', min: 0 },
+                  { id: 'cupid', name: 'Thần Tình Yêu', color: 'text-rose-400', min: 0 },
+                  { id: 'jester', name: 'Kẻ Chán Đời', color: 'text-violet-400', min: 0 },
+                ].map((r) => {
+                  const count = config.roleConfig?.[r.id] || 0;
+                  return (
+                    <div key={r.id} className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60 flex items-center justify-between">
+                      <div>
+                        <span className={`text-xs font-bold ${r.color}`}>{r.name}</span>
+                        <div className="text-lg font-mono font-bold text-white">{count}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleRoleCountChange(r.id, -1)}
+                          disabled={count <= r.min}
+                          className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-30 text-white font-bold flex items-center justify-center cursor-pointer text-sm"
                         >
-                          {voiceStates[p.id]?.isMuted ? '🔇' : voiceStates[p.id]?.isSpeaking ? '🗣️' : '🎙️'}
-                        </span>
-                      )}
+                          -
+                        </button>
+                        <button
+                          onClick={() => handleRoleCountChange(r.id, 1)}
+                          className="w-7 h-7 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold flex items-center justify-center cursor-pointer text-sm"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
+                  );
+                })}
+              </div>
 
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {p.isBot ? (
-                        <span className="text-[11px] px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 flex items-center gap-0.5">
-                          <Bot className="w-2.5 h-2.5" /> Bot AI
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-400">Người chơi</span>
-                      )}
-                    </div>
-                  </div>
+              {/* Tùy chỉnh thời gian */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800 text-xs">
+                <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40">
+                  <label className="text-slate-400 block mb-1">Thời gian Ban Đêm</label>
+                  <select
+                    value={config.nightDuration || 30}
+                    onChange={(e) => onUpdateConfig({ nightDuration: Number(e.target.value) })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white"
+                  >
+                    <option value={20}>20 giây (Rất nhanh)</option>
+                    <option value={30}>30 giây (Chuẩn)</option>
+                    <option value={45}>45 giây (Thong thả)</option>
+                  </select>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  {p.isHost ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800 font-medium">
-                      Chủ phòng
-                    </span>
-                  ) : p.isReady ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-medium flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Sẵn sàng
-                    </span>
-                  ) : (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-                      Chưa sẵn sàng
-                    </span>
-                  )}
-
-                  {/* Nút xóa Bot dành cho Host */}
-                  {isHost && p.isBot && (
-                    <button
-                      onClick={() => {
-                        soundFx.playClick();
-                        onRemoveBot(p.id);
-                      }}
-                      className="p-1.5 rounded-lg hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition cursor-pointer"
-                      title="Xóa Bot này"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40">
+                  <label className="text-slate-400 block mb-1">Thời gian Thảo Luận Ban Ngày</label>
+                  <select
+                    value={config.discussionDuration || 45}
+                    onChange={(e) => onUpdateConfig({ discussionDuration: Number(e.target.value) })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white"
+                  >
+                    <option value={30}>30 giây (Nhanh)</option>
+                    <option value={45}>45 giây (Chuẩn)</option>
+                    <option value={60}>60 giây (Kỹ lưỡng)</option>
+                    <option value={90}>90 giây (Tranh luận dài)</option>
+                  </select>
+                </div>
+                <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40">
+                  <label className="text-slate-400 block mb-1">Thời gian Bỏ Phiếu Treo Cổ</label>
+                  <select
+                    value={config.votingDuration || 30}
+                    onChange={(e) => onUpdateConfig({ votingDuration: Number(e.target.value) })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-1.5 text-white"
+                  >
+                    <option value={20}>20 giây</option>
+                    <option value={30}>30 giây</option>
+                    <option value={45}>45 giây</option>
+                  </select>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Danh sách người chơi trong phòng */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 backdrop-blur-xl shadow-xl">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-bold text-white text-base">
+                  DANH SÁCH NGƯỜI CHƠI ({players.length}/16)
+                </h3>
+              </div>
+              <span className="text-xs text-slate-400">
+                {players.filter((p) => p.isReady || p.isHost).length}/{players.length} Đã sẵn sàng
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {players.map((p) => {
+                const isMe = p.id === myId;
+                return (
+                  <div
+                    key={p.id}
+                    className={`p-3.5 rounded-2xl border transition relative flex items-center justify-between ${
+                      isMe
+                        ? 'bg-slate-800/90 border-indigo-500/80 shadow-md shadow-indigo-950/50'
+                        : 'bg-slate-800/40 border-slate-700/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative text-3xl p-1 bg-slate-900/80 rounded-xl border border-slate-700/60">
+                        {p.avatar}
+                        {p.isHost && (
+                          <Crown className="w-4 h-4 text-amber-400 absolute -top-1.5 -right-1.5 fill-current" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-white text-sm truncate">{p.name}</span>
+                          {isMe && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-900 text-indigo-300 font-semibold">
+                              Bạn
+                            </span>
+                          )}
+                          {voiceStates[p.id]?.inVoice && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.2 rounded border font-mono ${
+                                voiceStates[p.id]?.isSpeaking
+                                  ? 'bg-emerald-950 text-emerald-300 border-emerald-500 animate-pulse font-bold'
+                                  : voiceStates[p.id]?.isMuted
+                                  ? 'bg-red-950 text-red-300 border-red-800'
+                                  : 'bg-slate-800 text-emerald-400 border-slate-700'
+                              }`}
+                              title={voiceStates[p.id]?.isMuted ? 'Tắt mic' : voiceStates[p.id]?.isSpeaking ? 'Đang nói' : 'Đang trong voice'}
+                            >
+                              {voiceStates[p.id]?.isMuted ? '🔇' : voiceStates[p.id]?.isSpeaking ? '🗣️' : '🎙️'}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {p.isBot ? (
+                            <span className="text-[11px] px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 flex items-center gap-0.5">
+                              <Bot className="w-2.5 h-2.5" /> Bot AI
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">Người chơi</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {p.isHost ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800 font-medium">
+                          Chủ phòng
+                        </span>
+                      ) : p.isReady ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800 font-medium flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Sẵn sàng
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                          Chưa sẵn sàng
+                        </span>
+                      )}
+
+                      {/* Nút xóa Bot dành cho Host */}
+                      {isHost && p.isBot && (
+                        <button
+                          onClick={() => {
+                            soundFx.playClick();
+                            onRemoveBot(p.id);
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                          title="Xóa Bot này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Cột phải (5/12): Ô Chat Phòng Chờ */}
+        <div className="lg:col-span-5 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-base">💬</span>
+              <h3 className="font-bold text-white text-sm uppercase tracking-wide">
+                CHAT PHÒNG CHỜ
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Trò chuyện cùng bạn bè
+            </span>
+          </div>
+
+          <ChatBox
+            messages={chatMessages}
+            onSendMessage={onSendMessage}
+            myRole={null}
+            isAlive={true}
+            phase="LOBBY"
+          />
         </div>
       </div>
 

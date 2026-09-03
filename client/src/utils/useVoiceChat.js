@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { socket } from './socket';
 
+// Danh sách STUN server toàn cầu đa tầng để đảm bảo kết nối P2P xuyên mạng (Wi-Fi, 4G, các nhà mạng khác nhau)
 const RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.services.mozilla.com' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
@@ -14,19 +22,31 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
   const [isDeafened, setIsDeafened] = useState(false);
   const [hasMicPermission, setHasMicPermission] = useState(null);
   const [voiceStates, setVoiceStates] = useState({}); // { [peerId]: { inVoice, isMuted, isSpeaking } }
-  const [activeChannel, setActiveChannel] = useState('VILLAGE'); // 'VILLAGE' | 'WEREWOLF' | 'GHOST' | 'SLEEP'
+  const [activeChannel, setActiveChannel] = useState('LOBBY'); // 'LOBBY' | 'VILLAGE' | 'WEREWOLF' | 'GHOST' | 'SLEEP'
 
   const localStreamRef = useRef(null);
   const peerConnectionsRef = useRef(new Map()); // peerId -> RTCPeerConnection
   const audioElementsRef = useRef(new Map()); // peerId -> HTMLAudioElement
+  const pendingCandidatesRef = useRef(new Map()); // peerId -> [RTCIceCandidateInit]
   const analyserRef = useRef(null);
   const audioCtxRef = useRef(null);
   const animFrameRef = useRef(null);
   const isSpeakingLocalRef = useRef(false);
 
+  // Tạo container ẩn trên DOM để chứa các thẻ <audio> giúp điện thoại (iOS Safari/Android Chrome) không bị mute
+  useEffect(() => {
+    let container = document.getElementById('webrtc-audio-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'webrtc-audio-container';
+      container.style.display = 'none';
+      document.body.appendChild(container);
+    }
+  }, []);
+
   // Xác định kênh thoại dựa trên trạng thái game và vai trò
   useEffect(() => {
-    if (!gameState) {
+    if (!gameState || gameState.phase === 'LOBBY') {
       setActiveChannel('LOBBY');
       return;
     }
@@ -50,15 +70,25 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
 
   // Cập nhật âm lượng / cách ly âm thanh giữa các người chơi theo quy tắc Ma Sói
   const updateAudioFiltering = useCallback(() => {
-    if (!gameState) return;
+    // Nếu đang ở phòng chờ (LOBBY), TẤT CẢ mọi người trong voice đều nghe thấy nhau rõ ràng
+    if (!gameState || gameState.phase === 'LOBBY') {
+      audioElementsRef.current.forEach((audioEl) => {
+        audioEl.volume = isDeafened ? 0 : 1.0;
+        audioEl.muted = isDeafened;
+      });
+      return;
+    }
+
     const phase = gameState.phase;
     const players = gameState.players || [];
 
     audioElementsRef.current.forEach((audioEl, peerId) => {
       if (isDeafened) {
         audioEl.volume = 0;
+        audioEl.muted = true;
         return;
       }
+      audioEl.muted = false;
 
       const peer = players.find((p) => p.id === peerId);
       if (!peer) {
@@ -85,7 +115,7 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
         if (myRole === 'werewolf' && peer.role === 'werewolf') {
           audioEl.volume = 1.0;
         } else {
-          // Dân làng ban đêm không nghe thấy gì
+          // Dân làng ban đêm không nghe thấy ai
           audioEl.volume = 0;
         }
         return;
@@ -97,7 +127,6 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
     });
   }, [gameState, isAlive, isDeafened, myRole]);
 
-  // Gọi updateAudioFiltering mỗi khi gameState, vai trò hoặc trạng thái mute thay đổi
   useEffect(() => {
     updateAudioFiltering();
   }, [updateAudioFiltering]);
@@ -107,6 +136,9 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioCtx();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
       audioCtxRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
@@ -117,7 +149,6 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
 
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
-
       let speakingCounter = 0;
 
       const checkAudio = () => {
@@ -131,10 +162,11 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
         const average = sum / bufferLength;
 
         // Nếu âm lượng vượt ngưỡng và mic không bị mute
-        const isSpeakingNow = average > 18 && !localStreamRef.current?.getAudioTracks()[0]?.muted && localStreamRef.current?.getAudioTracks()[0]?.enabled;
+        const audioTrack = localStreamRef.current?.getAudioTracks()[0];
+        const isSpeakingNow = average > 15 && audioTrack && audioTrack.enabled && !audioTrack.muted;
 
         if (isSpeakingNow) {
-          speakingCounter = Math.min(speakingCounter + 1, 10);
+          speakingCounter = Math.min(speakingCounter + 1, 8);
         } else {
           speakingCounter = Math.max(speakingCounter - 1, 0);
         }
@@ -154,23 +186,54 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
 
       checkAudio();
     } catch (err) {
-      console.warn('Audio analyser error:', err);
+      console.warn('[WebRTC] Audio analyser error:', err);
     }
   };
 
   // Tạo WebRTC Peer Connection tới peerId
   const createPeerConnection = useCallback((peerId, isInitiator = false) => {
-    if (peerConnectionsRef.current.has(peerId)) {
-      return peerConnectionsRef.current.get(peerId);
+    let pc = peerConnectionsRef.current.get(peerId);
+    if (pc) {
+      // Đảm bảo các audio tracks đã được thêm vào kết nối
+      if (localStreamRef.current) {
+        const senders = pc.getSenders();
+        localStreamRef.current.getAudioTracks().forEach((track) => {
+          const alreadyAdded = senders.some((s) => s.track === track);
+          if (!alreadyAdded) {
+            try {
+              pc.addTrack(track, localStreamRef.current);
+            } catch (err) {
+              console.warn('[WebRTC] Error re-adding track:', err);
+            }
+          }
+        });
+      }
+
+      if (isInitiator) {
+        pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false })
+          .then((offer) => pc.setLocalDescription(offer))
+          .then(() => {
+            socket.emit('voice:signal', {
+              targetId: peerId,
+              signal: pc.localDescription,
+            });
+          })
+          .catch((err) => console.error('[WebRTC] Error creating re-offer:', err));
+      }
+      return pc;
     }
 
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionsRef.current.set(peerId, pc);
 
     // Gửi track mic cục bộ tới peer nếu có
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => {
-        pc.addTrack(track, localStreamRef.current);
+      localStreamRef.current.getAudioTracks().forEach((track) => {
+        try {
+          pc.addTrack(track, localStreamRef.current);
+        } catch (e) {
+          console.warn('[WebRTC] Error adding track:', e);
+        }
       });
     }
 
@@ -179,20 +242,35 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
       if (event.candidate) {
         socket.emit('voice:signal', {
           targetId: peerId,
-          signal: { type: 'candidate', candidate: event.candidate },
+          signal: { type: 'candidate', candidate: event.candidate.toJSON() },
         });
       }
     };
 
-    // Nhận remote audio stream
+    // Nhận remote audio stream và gắn vào thẻ <audio> trong DOM
     pc.ontrack = (event) => {
       let audioEl = audioElementsRef.current.get(peerId);
       if (!audioEl) {
-        audioEl = new Audio();
+        audioEl = document.createElement('audio');
+        audioEl.id = `remote-audio-${peerId}`;
         audioEl.autoplay = true;
+        audioEl.setAttribute('playsinline', 'true');
+        audioEl.setAttribute('autoplay', 'true');
+
+        const container = document.getElementById('webrtc-audio-container') || document.body;
+        container.appendChild(audioEl);
         audioElementsRef.current.set(peerId, audioEl);
       }
+
       audioEl.srcObject = event.streams[0];
+
+      // Kích hoạt phát âm thanh ngay lập tức
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn(`[WebRTC] Autoplay waiting for user gesture for ${peerId}:`, err);
+        });
+      }
       updateAudioFiltering();
     };
 
@@ -202,9 +280,9 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
       }
     };
 
-    // Nếu là initiator thì tạo offer
+    // Nếu là initiator thì tạo offer gửi cho peer
     if (isInitiator) {
-      pc.createOffer({ offerToReceiveAudio: true })
+      pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false })
         .then((offer) => pc.setLocalDescription(offer))
         .then(() => {
           socket.emit('voice:signal', {
@@ -212,7 +290,7 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
             signal: pc.localDescription,
           });
         })
-        .catch((err) => console.error('Error creating offer:', err));
+        .catch((err) => console.error('[WebRTC] Error creating offer:', err));
     }
 
     return pc;
@@ -227,13 +305,26 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
     const audioEl = audioElementsRef.current.get(peerId);
     if (audioEl) {
       audioEl.srcObject = null;
+      if (audioEl.parentNode) {
+        audioEl.parentNode.removeChild(audioEl);
+      }
       audioElementsRef.current.delete(peerId);
     }
+    pendingCandidatesRef.current.delete(peerId);
   };
 
   // Tham gia Voice Chat
   const joinVoice = async () => {
     try {
+      // Mở khóa AudioContext trên trình duyệt di động
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const dummyCtx = new AudioCtx();
+        if (dummyCtx.state === 'suspended') {
+          await dummyCtx.resume().catch(() => {});
+        }
+      }
+
       let stream = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -246,7 +337,7 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
         });
         setHasMicPermission(true);
       } catch (micErr) {
-        console.warn('Microphone permission denied or not available. Entering listen-only mode:', micErr);
+        console.warn('[WebRTC] Microphone permission denied or not available. Entering listen-only mode:', micErr);
         setHasMicPermission(false);
       }
 
@@ -259,7 +350,7 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
       setIsMuted(false);
       socket.emit('voice:join');
     } catch (err) {
-      console.error('Failed to join voice:', err);
+      console.error('[WebRTC] Failed to join voice:', err);
     }
   };
 
@@ -278,8 +369,10 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
 
     audioElementsRef.current.forEach((el) => {
       el.srcObject = null;
+      if (el.parentNode) el.parentNode.removeChild(el);
     });
     audioElementsRef.current.clear();
+    pendingCandidatesRef.current.clear();
 
     setInVoice(false);
     socket.emit('voice:leave');
@@ -305,7 +398,6 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
     const newDeaf = !isDeafened;
     setIsDeafened(newDeaf);
     if (newDeaf && !isMuted) {
-      // Khi deafen thì tự động mute mic để tránh nói 1 chiều
       toggleMute();
     }
   };
@@ -334,6 +426,18 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
       try {
         if (signal.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
+
+          // Xử lý các ICE candidate đã được buffer trong khi chờ offer
+          const pending = pendingCandidatesRef.current.get(senderId) || [];
+          for (const cand of pending) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (err) {
+              console.warn('[WebRTC] Error applying queued candidate:', err);
+            }
+          }
+          pendingCandidatesRef.current.delete(senderId);
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           socket.emit('voice:signal', {
@@ -342,11 +446,30 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
           });
         } else if (signal.type === 'answer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
+
+          // Xử lý các ICE candidate đã được buffer trong khi chờ answer
+          const pending = pendingCandidatesRef.current.get(senderId) || [];
+          for (const cand of pending) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (err) {
+              console.warn('[WebRTC] Error applying queued candidate:', err);
+            }
+          }
+          pendingCandidatesRef.current.delete(senderId);
         } else if (signal.type === 'candidate' && signal.candidate) {
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          // Xử lý chống race condition: nếu remoteDescription chưa set, buffer lại
+          if (!pc.remoteDescription) {
+            if (!pendingCandidatesRef.current.has(senderId)) {
+              pendingCandidatesRef.current.set(senderId, []);
+            }
+            pendingCandidatesRef.current.get(senderId).push(signal.candidate);
+          } else {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          }
         }
       } catch (err) {
-        console.error('WebRTC signal handling error:', err);
+        console.error('[WebRTC] Signal handling error:', err);
       }
     };
 

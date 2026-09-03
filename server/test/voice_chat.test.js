@@ -122,11 +122,16 @@ server.listen(0, async () => {
   console.log(`Voice Test Server đang chạy trên port ${PORT}`);
 
   try {
-    const hostSocket = ClientIO(`http://localhost:${PORT}`);
-    const player2Socket = ClientIO(`http://localhost:${PORT}`);
+    const hostSocket = ClientIO(`http://localhost:${PORT}`, { reconnection: false, autoConnect: false });
+    const player2Socket = ClientIO(`http://localhost:${PORT}`, { reconnection: false, autoConnect: false });
 
-    await new Promise((r) => hostSocket.on('connect', r));
-    await new Promise((r) => player2Socket.on('connect', r));
+    const hostConnectPromise = new Promise((r) => hostSocket.on('connect', r));
+    const player2ConnectPromise = new Promise((r) => player2Socket.on('connect', r));
+
+    hostSocket.connect();
+    player2Socket.connect();
+
+    await Promise.all([hostConnectPromise, player2ConnectPromise]);
     console.log('✓ Cả 2 client kết nối thành công tới server');
 
     // 1. Tạo phòng & Tham gia phòng

@@ -222,9 +222,9 @@ io.on('connection', (socket) => {
 
       socket.emit('voice:all_peers', { peers });
 
-      // Thông báo cho các peer khác trong phòng
+      // Thông báo cho các peer khác ĐANG TRONG VOICE CHAT
       for (const p of room.players) {
-        if (p.socket && p.id !== socket.id) {
+        if (p.socket && p.id !== socket.id && p.inVoice) {
           p.socket.emit('voice:peer_joined', { peerId: socket.id });
         }
         if (p.socket) {

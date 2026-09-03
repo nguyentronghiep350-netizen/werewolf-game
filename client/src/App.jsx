@@ -48,12 +48,11 @@ export default function App() {
       setConfig(data.config);
       setGameState(data.state);
 
-      // Nếu chuyển về LOBBY thì reset các biến phụ
+      // Nếu chuyển về LOBBY thì reset các biến vai trò của ván trước
       if (data.state.phase === 'LOBBY') {
         setSeerResult(null);
         setWitchVictim(null);
         setLoverPartner(null);
-        setChatMessages([]);
       }
     });
 
@@ -220,6 +219,10 @@ export default function App() {
             onStartGame={handleStartGame}
             onModeratorAction={handleModeratorAction}
             voiceStates={voiceChat.voiceStates}
+            chatMessages={chatMessages}
+            onSendMessage={handleSendMessage}
+            inVoice={voiceChat.inVoice}
+            onJoinVoice={voiceChat.joinVoice}
           />
         ) : (
           <GameScreen
