@@ -463,7 +463,7 @@ export default function WaitingRoom({
                               Bạn
                             </span>
                           )}
-                          {voiceStates[p.id]?.inVoice && (
+                          {voiceStates[p.id]?.inVoice ? (
                             <span
                               className={`text-[10px] px-1.5 py-0.2 rounded border font-mono ${
                                 voiceStates[p.id]?.isSpeaking
@@ -474,9 +474,13 @@ export default function WaitingRoom({
                               }`}
                               title={voiceStates[p.id]?.isMuted ? 'Tắt mic' : voiceStates[p.id]?.isSpeaking ? 'Đang nói' : 'Đang trong voice'}
                             >
-                              {voiceStates[p.id]?.isMuted ? '🔇' : voiceStates[p.id]?.isSpeaking ? '🗣️' : '🎙️'}
+                              {voiceStates[p.id]?.isMuted ? '🔇 Tắt mic' : voiceStates[p.id]?.isSpeaking ? '🗣️ Đang nói' : '🎙️ Đang nghe'}
                             </span>
-                          )}
+                          ) : !p.isBot ? (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-900/80 text-slate-500 border border-slate-800" title="Người này chưa bấm Bật Voice Chat">
+                              Chưa vào mic
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-1 mt-0.5">
