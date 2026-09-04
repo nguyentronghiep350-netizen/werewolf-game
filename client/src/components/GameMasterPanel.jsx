@@ -140,6 +140,31 @@ export default function GameMasterPanel({
               </div>
             </div>
 
+            {/* Night Step Advance Control (Dành riêng cho ban đêm) */}
+            {gameState.phase?.startsWith('NIGHT') && (
+              <div className="p-2.5 rounded-2xl bg-amber-950/60 border border-amber-500/50 space-y-2 shadow-md">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-amber-300 font-bold flex items-center gap-1">
+                    <Moon className="w-3.5 h-3.5 text-amber-400" />
+                    Lượt Gọi Ban Đêm:
+                  </span>
+                  <span className="font-mono text-white bg-black/40 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                    {gameState.activeNightTitle || 'Đêm Buông Xuống'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    soundFx.playClick();
+                    onModeratorAction('advance_night_step');
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  <span>Chuyển Sang Vai Trò Tiếp Theo (Next Turn)</span>
+                </button>
+              </div>
+            )}
+
             {/* Step Navigation Controls */}
             <div className="flex items-center justify-between gap-2 pt-1">
               <button
@@ -148,15 +173,15 @@ export default function GameMasterPanel({
                 className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 font-semibold flex items-center justify-center gap-1 cursor-pointer transition text-xs"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span>Bước Trước</span>
+                <span>Kịch Bản Trước</span>
               </button>
 
               <button
                 onClick={handleNextStep}
                 disabled={currentStepIndex === script.length - 1}
-                className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 disabled:opacity-30 text-slate-950 font-black flex items-center justify-center gap-1 cursor-pointer transition text-xs shadow-md"
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-200 font-bold flex items-center justify-center gap-1 cursor-pointer transition text-xs border border-slate-700"
               >
-                <span>Bước Tiếp</span>
+                <span>Kịch Bản Tiếp</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

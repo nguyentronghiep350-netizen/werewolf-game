@@ -28,19 +28,26 @@ if (deck.status !== 0) {
   process.exit(1);
 }
 
-console.log('\n>>> [5/6] CHẠY BỘ MÔ PHỎNG 60 TRẬN TEAM 9 AI (6 CHẾ ĐỘ X 10 LẦN)...');
+console.log('\n>>> [5/7] CHẠY BỘ MÔ PHỎNG 60 TRẬN TEAM 9 AI (6 CHẾ ĐỘ X 10 LẦN)...');
 const aiSim = spawnSync('node', ['server/test/ai_team_simulation.js'], { stdio: 'inherit' });
 if (aiSim.status !== 0) {
   console.error('Mô phỏng Team AI thất bại!');
   process.exit(1);
 }
 
-console.log('\n>>> [6/6] CHẠY BỘ KIỂM THỬ E2E THỜI GIAN THỰC 9 SOCKETS KẾT NỐI ĐỒNG THỜI...');
+console.log('\n>>> [6/7] CHẠY BỘ KIỂM THỬ E2E THỜI GIAN THỰC 9 SOCKETS KẾT NỐI ĐỒNG THỜI...');
 const aiSockets = spawnSync('node', ['server/test/ai_team_e2e_9sockets.js'], { stdio: 'inherit' });
 if (aiSockets.status !== 0) {
   console.error('Kiểm thử E2E 9 Sockets thất bại!');
   process.exit(1);
 }
 
-console.log('\n🌟 TOÀN BỘ 6 BỘ KIỂM THỬ VÀ MÔ PHỎNG ĐỀU VƯỢT QUA XUẤT SẮC 100%! 🌟');
+console.log('\n>>> [7/7] CHẠY BỘ KIỂM THỬ GAMEPLAY BAN ĐÊM TUẦN TỰ (SEQUENTIAL NIGHT TURNS)...');
+const seqNight = spawnSync('node', ['server/test/sequential_night.test.js'], { stdio: 'inherit' });
+if (seqNight.status !== 0) {
+  console.error('Kiểm thử Gameplay Ban Đêm Tuần Tự thất bại!');
+  process.exit(1);
+}
+
+console.log('\n🌟 TOÀN BỘ 7 BỘ KIỂM THỬ VÀ MÔ PHỎNG ĐỀU VƯỢT QUA XUẤT SẮC 100%! 🌟');
 process.exit(0);

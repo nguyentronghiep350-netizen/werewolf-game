@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Sun, Clock, Skull, Heart, Shield, Flame, Eye, Gavel } from 'lucide-react';
+import { Moon, Sun, Clock, Skull, Heart, Shield, Flame, Eye, Gavel, MessageSquare, ScrollText } from 'lucide-react';
 import { soundFx } from '../utils/audio';
 import NightActionPanel from './NightActionPanel';
 import VotingPanel from './VotingPanel';
@@ -28,6 +28,8 @@ export default function GameScreen({
   loverPartner,
   voiceStates = {},
 }) {
+  const [activeBottomTab, setActiveBottomTab] = useState('chat'); // 'chat' | 'logs'
+
   const {
     phase,
     nightNumber,
@@ -67,14 +69,20 @@ export default function GameScreen({
   const getPhaseInfo = () => {
     switch (phase) {
       case 'STARTING':
-        return { title: 'CHUẨN BỊ BẮT ĐẦU', icon: Clock, color: 'text-amber-400' };
+        return { title: 'CHUẨN BỊ BẮT ĐẦU', icon: Clock, color: 'text-amber-400', desc: 'Ván đấu đang được khởi tạo...' };
       case 'NIGHT_START':
-      case 'NIGHT_ACTION':
         return {
           title: `ĐÊM THỨ ${nightNumber}`,
           icon: Moon,
           color: 'text-indigo-400',
-          desc: 'Ngôi làng chìm vào bóng tối. Các thế lực ngầm bắt đầu hành động.',
+          desc: 'Ngôi làng chìm vào bóng tối. Mọi người hãy nhắm mắt đi ngủ...',
+        };
+      case 'NIGHT_ACTION':
+        return {
+          title: gameState?.activeNightTitle ? `ĐÊM ${nightNumber} - ${gameState.activeNightTitle.toUpperCase()}` : `ĐÊM THỨ ${nightNumber}`,
+          icon: Moon,
+          color: 'text-indigo-400',
+          desc: gameState?.activeNightPrompt || 'Quản trò đang gọi các vai trò ban đêm theo thứ tự logic.',
         };
       case 'MORNING':
         return {
@@ -121,26 +129,29 @@ export default function GameScreen({
   const phaseInfo = getPhaseInfo();
   const PhaseIcon = phaseInfo.icon;
 
+  const aliveNonModCount = players.filter((p) => p.isAlive && p.role !== 'moderator').length;
+  const totalNonModCount = players.filter((p) => p.role !== 'moderator').length;
+
   return (
-    <div className={`min-h-[calc(100vh-65px)] flex flex-col justify-between transition-colors duration-1000 ${
-      isNight ? 'bg-[#060813]' : 'bg-[#0b0f19]'
+    <div className={`min-h-[calc(100vh-65px)] flex flex-col justify-between transition-colors duration-700 ${
+      isNight ? 'bg-[#060813]' : 'bg-[#0a0e1a]'
     }`}>
       {/* Top Banner Thanh Trạng Thái */}
-      <div className="max-w-6xl w-full mx-auto p-4 space-y-4">
-        <div className={`p-4 rounded-3xl border backdrop-blur-xl shadow-xl flex items-center justify-between transition-all ${
+      <div className="max-w-6xl w-full mx-auto p-3 md:p-4 space-y-3.5">
+        <div className={`p-3.5 md:p-4 rounded-3xl border backdrop-blur-xl shadow-xl flex items-center justify-between transition-all ${
           isNight
-            ? 'bg-slate-900/80 border-indigo-950/80 moon-glow'
-            : 'bg-slate-900/80 border-amber-950/80'
+            ? 'bg-slate-900/90 border-indigo-900/60 moon-glow'
+            : 'bg-slate-900/90 border-amber-900/40'
         }`}>
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-2xl ${
-              isNight ? 'bg-indigo-950/80 text-indigo-400' : 'bg-amber-950/80 text-amber-400'
+            <div className={`p-2 rounded-2xl ${
+              isNight ? 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/60' : 'bg-amber-950/80 text-amber-400 border border-amber-800/60'
             }`}>
-              <PhaseIcon className="w-6 h-6" />
+              <PhaseIcon className="w-5 h-5 md:w-6 md:h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className={`text-base md:text-lg font-black tracking-wider ${phaseInfo.color}`}>
+                <h2 className={`text-sm md:text-base font-black tracking-wider ${phaseInfo.color}`}>
                   {phaseInfo.title}
                 </h2>
                 {!isAlive && (
@@ -149,14 +160,14 @@ export default function GameScreen({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">{phaseInfo.desc}</p>
+              <p className="text-[11px] text-slate-400 hidden sm:block">{phaseInfo.desc}</p>
             </div>
           </div>
 
           {timer > 0 && (
-            <div className="flex items-center gap-2 bg-slate-950/80 px-4 py-2 rounded-2xl border border-slate-800">
+            <div className="flex items-center gap-1.5 bg-slate-950/90 px-3.5 py-1.5 rounded-2xl border border-slate-800">
               <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span className="text-xl md:text-2xl font-black font-mono text-white">
+              <span className="text-lg md:text-xl font-black font-mono text-white">
                 {timer}s
               </span>
             </div>
@@ -165,27 +176,27 @@ export default function GameScreen({
 
         {/* Thông báo kết quả sáng (Morning Death announcement) */}
         {phase === 'MORNING' && (
-          <div className="p-4 rounded-3xl bg-slate-900/90 border border-amber-800/60 shadow-xl text-center animate-fadeIn">
-            <div className="text-2xl mb-1">🌅</div>
-            <h3 className="text-sm font-bold text-amber-300 uppercase tracking-wider">
+          <div className="p-3.5 rounded-3xl bg-slate-900/90 border border-amber-800/60 shadow-xl text-center animate-fadeIn">
+            <div className="text-xl mb-0.5">🌅</div>
+            <h3 className="text-xs font-bold text-amber-300 uppercase tracking-wider">
               Kết Quả Đêm Thứ {nightNumber}
             </h3>
             {nightDeaths.length === 0 ? (
               <p className="text-xs text-emerald-400 mt-1 font-medium">
-                Một đêm yên bình lạ kỳ trôi qua. Không có bất kỳ ai phải bỏ mạng!
+                Một đêm yên bình lạ kỳ! Không có ai phải bỏ mạng đêm qua.
               </p>
             ) : (
-              <div className="mt-2 space-y-1">
-                <p className="text-xs text-rose-400 font-bold">
+              <div className="mt-1.5 space-y-1">
+                <p className="text-[11px] text-rose-400 font-bold">
                   Bóng đêm đã cướp đi sinh mạng của:
                 </p>
-                <div className="flex flex-wrap justify-center gap-2 mt-1">
+                <div className="flex flex-wrap justify-center gap-1.5 mt-1">
                   {nightDeaths.map((d) => (
                     <span
                       key={d.id}
-                      className="px-3 py-1 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs font-semibold flex items-center gap-1.5"
+                      className="px-2.5 py-0.5 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs font-semibold flex items-center gap-1"
                     >
-                      <Skull className="w-3.5 h-3.5" />
+                      <Skull className="w-3 h-3" />
                       {d.name} ({d.roleName}) - {d.reason}
                     </span>
                   ))}
@@ -196,17 +207,17 @@ export default function GameScreen({
         )}
 
         {/* Bàn Chơi Danh Sách Người Chơi */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 md:p-5 backdrop-blur-xl shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              BÀN TRÒN DÂN LÀNG ({players.filter((p) => p.isAlive && p.role !== 'moderator').length}/{players.filter((p) => p.role !== 'moderator').length} CÒN SỐNG)
+        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-3.5 md:p-4 backdrop-blur-xl shadow-xl space-y-2.5">
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+            <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+              BÀN TRÒN DÂN LÀNG ({aliveNonModCount}/{totalNonModCount} CÒN SỐNG)
             </h3>
-            <span className="text-xs text-slate-500">
-              {players.filter((p) => !p.isAlive && p.role !== 'moderator').length} Đã chết
+            <span className="text-[11px] text-slate-400">
+              {totalNonModCount - aliveNonModCount} Đã chết
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
             {players.map((p) => {
               const isMe = p.id === myId;
               const hasVote = dayVotes[p.id];
@@ -221,11 +232,11 @@ export default function GameScreen({
               return (
                 <div
                   key={p.id}
-                  className={`p-2.5 rounded-2xl border transition-all duration-200 relative flex flex-col items-center text-center ${
+                  className={`p-2 rounded-2xl border transition-all duration-200 relative flex flex-col items-center text-center ${
                     isSpeaking
                       ? 'ring-2 ring-emerald-400 bg-emerald-950/40 border-emerald-500 shadow-lg shadow-emerald-950/60 scale-102'
                       : !p.isAlive
-                      ? 'bg-slate-950/70 border-slate-800 opacity-60'
+                      ? 'bg-slate-950/60 border-slate-800 opacity-50 grayscale'
                       : isMe
                       ? 'bg-slate-800/90 border-indigo-500 shadow-md shadow-indigo-950/50'
                       : 'bg-slate-800/40 border-slate-700/60'
@@ -248,7 +259,7 @@ export default function GameScreen({
                       title={isMuted ? 'Đang tắt mic' : isSpeaking ? 'Đang nói' : 'Đang trong voice'}
                     >
                       {isMuted ? (
-                        <span className="text-[10px] bg-red-950/90 text-red-300 px-1 py-0.2 rounded border border-red-800 leading-none">
+                        <span className="text-[10px] bg-red-950 text-red-300 px-1 py-0.2 rounded border border-red-800 leading-none">
                           🔇
                         </span>
                       ) : isSpeaking ? (
@@ -257,17 +268,17 @@ export default function GameScreen({
                           <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                         </span>
                       ) : (
-                        <span className="text-[10px] bg-emerald-950/90 text-emerald-300 px-1 py-0.2 rounded border border-emerald-800 leading-none">
+                        <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1 py-0.2 rounded border border-emerald-800 leading-none">
                           🎙️
                         </span>
                       )}
                     </div>
                   )}
 
-                  <div className="relative text-3xl mb-1">
+                  <div className="relative text-2xl md:text-3xl my-0.5">
                     {p.avatar}
                     {!p.isAlive && (
-                      <span className="absolute -bottom-1 -right-1 text-sm bg-black/80 rounded-full p-0.5">
+                      <span className="absolute -bottom-1 -right-1 text-xs bg-black/90 rounded-full p-0.5">
                         💀
                       </span>
                     )}
@@ -279,7 +290,7 @@ export default function GameScreen({
 
                   {/* Hiển thị vai trò nếu đã chết hoặc được reveal */}
                   {p.role === 'moderator' ? (
-                    <span className="text-[10px] font-bold text-amber-400 mt-0.5 truncate flex items-center justify-center gap-1">
+                    <span className="text-[10px] font-bold text-amber-400 mt-0.5 truncate flex items-center justify-center gap-0.5">
                       👑 Quản Trò
                     </span>
                   ) : p.role ? (
@@ -309,18 +320,18 @@ export default function GameScreen({
 
         {/* Banner Quản Trò Toàn Năng nếu bản thân là Quản Trò */}
         {myRole === 'moderator' && (
-          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-lg flex items-center justify-between gap-3 text-xs animate-fadeIn">
-            <div className="flex items-center gap-2.5">
+          <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-lg flex items-center justify-between gap-3 text-xs animate-fadeIn">
+            <div className="flex items-center gap-2">
               <span className="text-xl">👑</span>
               <div>
-                <p className="font-bold text-amber-300 uppercase tracking-wide">BẠN ĐANG LÀ QUẢN TRÒ TOÀN NĂNG (GAME MASTER)</p>
-                <p className="text-slate-300 text-[11px] mt-0.5">
-                  Bạn là trọng tài công tâm của làng. Mở <strong>Bảng Quản Trò</strong> ở góc dưới để kích hoạt lời thoại AI, chuyển đổi ngày/đêm và xử lý sự kiện!
+                <p className="font-bold text-amber-300 uppercase tracking-wide">QUẢN TRÒ TOÀN NĂNG (GAME MASTER)</p>
+                <p className="text-slate-300 text-[11px]">
+                  Mở <strong>Bảng Quản Trò</strong> ở góc dưới để điều phối ván đấu!
                 </p>
               </div>
             </div>
-            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-[11px] font-bold border border-amber-500/30 whitespace-nowrap">
-              God Mode Active
+            <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-[10px] font-bold border border-amber-500/30 whitespace-nowrap">
+              Master Mode
             </span>
           </div>
         )}
@@ -336,6 +347,10 @@ export default function GameScreen({
             onNightAction={onNightAction}
             seerResult={seerResult}
             witchVictim={witchVictim}
+            activeNightRole={gameState?.activeNightRole}
+            activeNightStep={gameState?.activeNightStep}
+            activeNightTitle={gameState?.activeNightTitle}
+            activeNightPrompt={gameState?.activeNightPrompt}
           />
         )}
 
@@ -353,16 +368,44 @@ export default function GameScreen({
           />
         )}
 
-        {/* Lưới Hộp Chat & Nhật Ký Làng */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-20">
-          <ChatBox
-            messages={chatMessages}
-            onSendMessage={onSendMessage}
-            myRole={myRole}
-            isAlive={isAlive}
-            phase={phase}
-          />
-          <GameLogs logs={logs} />
+        {/* Khu vực Giao Tiếp & Nhật Ký (Tabbed View for Mobile & Compact Desktop) */}
+        <div className="space-y-2 pb-24">
+          <div className="flex bg-slate-950/70 p-1 rounded-2xl border border-slate-800 max-w-xs">
+            <button
+              onClick={() => setActiveBottomTab('chat')}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeBottomTab === 'chat'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Hộp Chat</span>
+            </button>
+            <button
+              onClick={() => setActiveBottomTab('logs')}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeBottomTab === 'logs'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ScrollText className="w-3.5 h-3.5 text-amber-400" />
+              <span>Nhật Ký ({logs.length})</span>
+            </button>
+          </div>
+
+          {activeBottomTab === 'chat' ? (
+            <ChatBox
+              messages={chatMessages}
+              onSendMessage={onSendMessage}
+              myRole={myRole}
+              isAlive={isAlive}
+              phase={phase}
+            />
+          ) : (
+            <GameLogs logs={logs} />
+          )}
         </div>
       </div>
 

@@ -325,6 +325,10 @@ export class GameRoom {
       this.gameState.clearTimer();
       this.gameState.phase = phase;
       this.gameState.addLog('system', `🔔 Quản Trò chuyển giai đoạn sang: ${phase}`);
+    } else if (action === 'advance_night_step') {
+      this.gameState.advanceNightStep();
+    } else if (action === 'set_night_step' && typeof stepIndex === 'number') {
+      this.gameState.startNightStep(stepIndex);
     } else if (action === 'advance_script') {
       this.gameState.currentScriptStep = stepIndex ?? (this.gameState.currentScriptStep + 1);
     }
@@ -387,6 +391,10 @@ export class GameRoom {
   // Kích hoạt Bot
   triggerBotNightActions() {
     this.botAI.triggerNightActions();
+  }
+
+  triggerBotNightActionForRole(activeRole) {
+    this.botAI.triggerNightActionForRole(activeRole);
   }
 
   triggerBotDayChatter() {

@@ -38,118 +38,131 @@ export class BotAI {
     }
   }
 
-  // Hành động ban đêm của các Bot
-  triggerNightActions() {
+  // Hành động ban đêm của Bot theo từng vai trò được gọi
+  triggerNightActionForRole(activeRole) {
     const gameState = this.room.gameState;
     const botPlayers = this.room.players.filter((p) => p.isAlive && p.isBot);
 
-    // Xử lý có độ trễ nhẹ (1-3s) để tạo cảm giác tự nhiên như người chơi thật
     setTimeout(() => {
-      // 1. Bot Cupid (chỉ đêm 1)
-      const botCupid = botPlayers.find((p) => p.role === ROLES.CUPID && gameState.nightNumber === 1);
-      if (botCupid) {
-        const candidates = this.room.players.filter((p) => p.isAlive);
-        if (candidates.length >= 2) {
-          const shuffled = [...candidates].sort(() => 0.5 - Math.random());
-          gameState.handleNightAction(botCupid, {
-            action: 'cupid_pair',
-            targetId: shuffled[0].id,
-            target2Id: shuffled[1].id,
-          });
+      // 1. Bot Cupid
+      if (activeRole === ROLES.CUPID) {
+        const botCupid = botPlayers.find((p) => p.role === ROLES.CUPID && gameState.nightNumber === 1);
+        if (botCupid) {
+          const candidates = this.room.players.filter((p) => p.isAlive);
+          if (candidates.length >= 2) {
+            const shuffled = [...candidates].sort(() => 0.5 - Math.random());
+            gameState.handleNightAction(botCupid, {
+              action: 'cupid_pair',
+              targetId: shuffled[0].id,
+              target2Id: shuffled[1].id,
+            });
+          }
         }
       }
 
       // 2. Bot Bảo Vệ
-      const botBodyguard = botPlayers.find((p) => p.role === ROLES.BODYGUARD);
-      if (botBodyguard) {
-        const aliveOthers = this.room.players.filter(
-          (p) => p.isAlive && p.id !== botBodyguard.lastProtectedId
-        );
-        if (aliveOthers.length > 0) {
-          const target = aliveOthers[Math.floor(Math.random() * aliveOthers.length)];
-          gameState.handleNightAction(botBodyguard, {
-            action: 'protect',
-            targetId: target.id,
-          });
-        }
-      }
-
-      // 3. Bot Tiên Tri
-      const botSeer = botPlayers.find((p) => p.role === ROLES.SEER);
-      if (botSeer) {
-        const uninspected = this.room.players.filter(
-          (p) => p.isAlive && p.id !== botSeer.id && !this.seerHistory.has(p.id)
-        );
-        const candidates = uninspected.length > 0 ? uninspected : this.room.players.filter((p) => p.isAlive && p.id !== botSeer.id);
-        if (candidates.length > 0) {
-          const target = candidates[Math.floor(Math.random() * candidates.length)];
-          this.seerHistory.add(target.id);
-          gameState.handleNightAction(botSeer, {
-            action: 'seer_inspect',
-            targetId: target.id,
-          });
-        }
-      }
-
-      // 4. Bot Ma Sói (Werewolves)
-      const botWolves = botPlayers.filter((p) => isWerewolfRole(p.role));
-      if (botWolves.length > 0) {
-        // Tìm các nạn nhân không phải là sói
-        const nonWolves = this.room.players.filter((p) => p.isAlive && !isWerewolfRole(p.role));
-        if (nonWolves.length > 0) {
-          // Ưu tiên cắn người chơi thật nếu có
-          const humanTarget = nonWolves.find((p) => !p.isBot);
-          const chosenTarget = (humanTarget && Math.random() < 0.65) ? humanTarget : nonWolves[Math.floor(Math.random() * nonWolves.length)];
-
-          for (const wolf of botWolves) {
-            gameState.handleNightAction(wolf, {
-              action: 'werewolf_vote',
-              targetId: chosenTarget.id,
+      if (activeRole === ROLES.BODYGUARD) {
+        const botBodyguard = botPlayers.find((p) => p.role === ROLES.BODYGUARD);
+        if (botBodyguard) {
+          const aliveOthers = this.room.players.filter(
+            (p) => p.isAlive && p.id !== botBodyguard.lastProtectedId
+          );
+          if (aliveOthers.length > 0) {
+            const target = aliveOthers[Math.floor(Math.random() * aliveOthers.length)];
+            gameState.handleNightAction(botBodyguard, {
+              action: 'protect',
+              targetId: target.id,
             });
           }
+        }
+      }
 
-          // Bot Sói thỉnh thoảng nhắn trong Kênh Sói
-          if (Math.random() < 0.7) {
-            const speaker = botWolves[0];
-            const wolfChatMessages = [
-              `Đêm nay thịt ${chosenTarget.name} đi anh em!`,
-              `Nhắm vào ${chosenTarget.name} nhé, người này nguy hiểm lắm!`,
-              `Cắn ${chosenTarget.name} là chuẩn bài luôn!`,
-              `Cứ diệt ${chosenTarget.name} trước cho an toàn!`,
-            ];
-            const msg = wolfChatMessages[Math.floor(Math.random() * wolfChatMessages.length)];
-            this.room.handleChatMessage(speaker.id, msg, 'werewolf');
+      // 3. Bot Ma Sói (Bao gồm các loài sói)
+      if (activeRole === 'werewolf' || activeRole === ROLES.WEREWOLF) {
+        const botWolves = botPlayers.filter((p) => isWerewolfRole(p.role));
+        if (botWolves.length > 0) {
+          const nonWolves = this.room.players.filter((p) => p.isAlive && !isWerewolfRole(p.role));
+          if (nonWolves.length > 0) {
+            const humanTarget = nonWolves.find((p) => !p.isBot);
+            const chosenTarget = (humanTarget && Math.random() < 0.65) ? humanTarget : nonWolves[Math.floor(Math.random() * nonWolves.length)];
+
+            for (const wolf of botWolves) {
+              gameState.handleNightAction(wolf, {
+                action: 'werewolf_vote',
+                targetId: chosenTarget.id,
+              });
+            }
+
+            if (Math.random() < 0.7) {
+              const speaker = botWolves[0];
+              const wolfChatMessages = [
+                `Đêm nay thịt ${chosenTarget.name} đi anh em!`,
+                `Nhắm vào ${chosenTarget.name} nhé, người này nguy hiểm lắm!`,
+                `Cắn ${chosenTarget.name} là chuẩn bài luôn!`,
+                `Cứ diệt ${chosenTarget.name} trước cho an toàn!`,
+              ];
+              const msg = wolfChatMessages[Math.floor(Math.random() * wolfChatMessages.length)];
+              this.room.handleChatMessage(speaker.id, msg, 'werewolf');
+            }
+          }
+        }
+      }
+
+      // 4. Bot Tiên Tri
+      if (activeRole === ROLES.SEER) {
+        const botSeer = botPlayers.find((p) => p.role === ROLES.SEER);
+        if (botSeer) {
+          const uninspected = this.room.players.filter(
+            (p) => p.isAlive && p.id !== botSeer.id && !this.seerHistory.has(p.id)
+          );
+          const candidates = uninspected.length > 0 ? uninspected : this.room.players.filter((p) => p.isAlive && p.id !== botSeer.id);
+          if (candidates.length > 0) {
+            const target = candidates[Math.floor(Math.random() * candidates.length)];
+            this.seerHistory.add(target.id);
+            gameState.handleNightAction(botSeer, {
+              action: 'seer_inspect',
+              targetId: target.id,
+            });
           }
         }
       }
 
       // 5. Bot Phù Thủy
-      const botWitch = botPlayers.find((p) => p.role === ROLES.WITCH);
-      if (botWitch) {
-        let save = false;
-        let killTargetId = null;
+      if (activeRole === ROLES.WITCH) {
+        const botWitch = botPlayers.find((p) => p.role === ROLES.WITCH);
+        if (botWitch) {
+          let save = false;
+          let killTargetId = null;
 
-        const victimId = gameState.getWerewolfTarget();
-        // Cứu nếu còn bình cứu và đêm 1 hoặc 2
-        if (victimId && !botWitch.witchSaveUsed && gameState.nightNumber <= 2) {
-          save = true;
-        }
-
-        // Dùng độc nếu đêm 3 trở đi và còn bình độc
-        if (!botWitch.witchKillUsed && gameState.nightNumber >= 3 && Math.random() < 0.4) {
-          const targets = this.room.players.filter((p) => p.isAlive && p.id !== botWitch.id && p.id !== victimId);
-          if (targets.length > 0) {
-            killTargetId = targets[Math.floor(Math.random() * targets.length)].id;
+          const victimId = gameState.getWerewolfTarget();
+          if (victimId && !botWitch.witchSaveUsed && gameState.nightNumber <= 2) {
+            save = true;
           }
-        }
 
-        gameState.handleNightAction(botWitch, {
-          action: 'witch_act',
-          save,
-          killTargetId,
-        });
+          if (!botWitch.witchKillUsed && gameState.nightNumber >= 3 && Math.random() < 0.4) {
+            const targets = this.room.players.filter((p) => p.isAlive && p.id !== botWitch.id && p.id !== victimId);
+            if (targets.length > 0) {
+              killTargetId = targets[Math.floor(Math.random() * targets.length)].id;
+            }
+          }
+
+          gameState.handleNightAction(botWitch, {
+            action: 'witch_act',
+            save,
+            killTargetId,
+          });
+        }
       }
-    }, 1500);
+    }, 1200);
+  }
+
+  // Hành động ban đêm của tất cả các Bot (Dự phòng và chạy mô phỏng)
+  triggerNightActions() {
+    this.triggerNightActionForRole(ROLES.CUPID);
+    this.triggerNightActionForRole(ROLES.BODYGUARD);
+    this.triggerNightActionForRole('werewolf');
+    this.triggerNightActionForRole(ROLES.SEER);
+    this.triggerNightActionForRole(ROLES.WITCH);
   }
 
   // Bot Thợ Săn bắn trả thù

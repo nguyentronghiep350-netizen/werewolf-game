@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, LogIn, Sparkles, Shield, Moon, Flame } from 'lucide-react';
+import { Users, Plus, LogIn, Sparkles, Shield, Dices, Copy, Check } from 'lucide-react';
 import { soundFx } from '../utils/audio';
 
 const AVATARS = ['🧑‍🌾', '🧙‍♂️', '🧝‍♀️', '🧛‍♂️', '🐺', '🦊', '🦉', '🛡️', '🏹', '🔮', '🎭', '👑'];
+const DEFAULT_NAMES = [
+  'Thợ Săn Trăng', 'Bác Thợ Rèn', 'Cô Bé Quàng Khăn Đỏ', 'Phù Thủy Trẻ',
+  'Hiệp Sĩ Rừng', 'Nhà Chiêm Tinh', 'Kỵ Sĩ Bóng Đêm', 'Lữ Khách Bí Ẩn',
+  'Trinh Sát Đêm', 'Tiên Nữ Rừng', 'Ẩn Giả Núi Cao', 'Thợ Bẫy Sói'
+];
 
 export default function Lobby({ onCreateRoom, onJoinRoom }) {
+  const [tab, setTab] = useState('create'); // 'create' | 'join'
   const [name, setName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('🧑‍🌾');
   const [roomCode, setRoomCode] = useState('');
@@ -20,15 +26,22 @@ export default function Lobby({ onCreateRoom, onJoinRoom }) {
       const code = codeParam.trim().toUpperCase();
       setRoomCode(code);
       setInvitedRoom(code);
+      setTab('join');
     }
 
-    // Tên ngẫu nhiên nếu chưa có
-    const defaultNames = ['Thợ Săn Trăng', 'Bác Thợ Rèn', 'Cô Bé Quàng Khăn Đỏ', 'Phù Thủy Trẻ', 'Hiệp Sĩ Rừng', 'Nhà Chiêm Tinh', 'Kỵ Sĩ Bóng Đêm'];
-    setName(defaultNames[Math.floor(Math.random() * defaultNames.length)]);
+    // Tên ngẫu nhiên khởi tạo
+    rollRandomName();
     setSelectedAvatar(AVATARS[Math.floor(Math.random() * AVATARS.length)]);
   }, []);
 
-  const handleCreate = () => {
+  const rollRandomName = () => {
+    soundFx.playClick();
+    const randomName = DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)];
+    setName(randomName);
+  };
+
+  const handleCreate = (e) => {
+    if (e) e.preventDefault();
     soundFx.playClick();
     if (!name.trim()) {
       setError('Vui lòng nhập tên của bạn!');
@@ -42,7 +55,8 @@ export default function Lobby({ onCreateRoom, onJoinRoom }) {
     });
   };
 
-  const handleJoin = () => {
+  const handleJoin = (e) => {
+    if (e) e.preventDefault();
     soundFx.playClick();
     if (!name.trim()) {
       setError('Vui lòng nhập tên của bạn!');
@@ -66,56 +80,105 @@ export default function Lobby({ onCreateRoom, onJoinRoom }) {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-red-950/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/3 -translate-x-1/2 w-80 h-80 bg-indigo-950/25 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl relative z-10">
-        <div className="text-center mb-6">
-          <div className="inline-flex p-3 rounded-2xl bg-gradient-to-b from-red-600 to-indigo-900 shadow-lg shadow-red-900/40 mb-3">
-            <span className="text-4xl">🐺</span>
+      <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-xl relative z-10 space-y-5">
+        {/* Header Logo */}
+        <div className="text-center">
+          <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-red-600 to-indigo-900 shadow-lg shadow-red-900/30 mb-2.5">
+            <span className="text-3xl">🐺</span>
           </div>
-          <h2 className="text-2xl font-black text-white tracking-wide">MA SÓI ONLINE</h2>
-          <p className="text-sm text-slate-400 mt-1">Đêm nay, ai sẽ là kẻ săn mồi?</p>
+          <h2 className="text-2xl font-black text-white tracking-wider">MA SÓI ONLINE</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Hồi hộp • Đấu trí • Tối giản & Dễ chơi</p>
         </div>
 
+        {/* Lời mời vào phòng nếu có URL param */}
         {invitedRoom && (
-          <div className="mb-5 p-3.5 bg-gradient-to-r from-amber-950/90 via-slate-900 to-indigo-950/90 border-2 border-amber-400/60 rounded-2xl text-center space-y-1 shadow-lg shadow-amber-950/40 animate-fade-in">
-            <div className="text-xs font-bold text-amber-300 flex items-center justify-center gap-1.5 uppercase tracking-wide">
-              <span>🎯</span> BẠN ĐÃ ĐƯỢC MỜI VÀO PHÒNG:
-              <span className="font-mono text-white text-sm bg-amber-500/30 px-2 py-0.5 rounded border border-amber-400/50 font-black">
-                {invitedRoom}
-              </span>
+          <div className="p-3 bg-gradient-to-r from-amber-950/80 via-slate-900 to-indigo-950/80 border border-amber-400/50 rounded-2xl text-center space-y-1 shadow-lg animate-fadeIn">
+            <div className="text-xs font-bold text-amber-300 flex items-center justify-center gap-1.5 uppercase">
+              <span>🎯</span> BẠN ĐÃ ĐƯỢC MỜI VÀO PHÒNG
             </div>
-            <p className="text-[11px] text-slate-300">
-              Chọn tên đại diện và bấm <strong>"VÀO PHÒNG NGAY"</strong> bên dưới để chiến cùng bạn bè!
-            </p>
+            <div className="text-lg font-mono font-black text-white tracking-widest bg-amber-500/20 py-1 rounded-lg border border-amber-400/40">
+              {invitedRoom}
+            </div>
           </div>
         )}
 
+        {/* Thông báo lỗi */}
         {error && (
-          <div className="mb-4 p-3 bg-red-950/70 border border-red-800 rounded-xl text-red-300 text-xs text-center animate-shake">
+          <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-red-200 text-xs text-center font-medium animate-shake">
             ⚠️ {error}
           </div>
         )}
 
-        {/* Nhập Tên & Avatar */}
-        <div className="space-y-4 mb-6">
+        {/* Tab Selector: Tạo Phòng / Vào Phòng */}
+        <div className="flex bg-slate-950/70 p-1 rounded-2xl border border-slate-800">
+          <button
+            type="button"
+            onClick={() => {
+              soundFx.playClick();
+              setTab('create');
+              setError('');
+            }}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              tab === 'create'
+                ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tạo Phòng Mới</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              soundFx.playClick();
+              setTab('join');
+              setError('');
+            }}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              tab === 'join'
+                ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Vào Phòng Bằng Mã</span>
+          </button>
+        </div>
+
+        {/* Form nhập thông tin */}
+        <div className="space-y-4">
+          {/* Nhập Biệt Danh + Dice Random */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
-              Tên hiển thị
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                Tên Của Bạn
+              </label>
+              <button
+                type="button"
+                onClick={rollRandomName}
+                className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer transition font-medium"
+                title="Đổi tên ngẫu nhiên"
+              >
+                <Dices className="w-3.5 h-3.5" />
+                <span>Đổi tên khác</span>
+              </button>
+            </div>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Nhập biệt danh của bạn..."
+              placeholder="Nhập biệt danh..."
               maxLength={20}
-              className="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition text-sm"
+              className="w-full px-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-white font-medium placeholder-slate-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition text-sm shadow-inner"
             />
           </div>
 
+          {/* Chọn Avatar */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+            <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
               Chọn Avatar
             </label>
-            <div className="grid grid-cols-6 gap-2 bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/60">
+            <div className="grid grid-cols-6 gap-2 bg-slate-950/50 p-2.5 rounded-2xl border border-slate-800">
               {AVATARS.map((av) => (
                 <button
                   key={av}
@@ -124,10 +187,10 @@ export default function Lobby({ onCreateRoom, onJoinRoom }) {
                     soundFx.playClick();
                     setSelectedAvatar(av);
                   }}
-                  className={`text-2xl p-2 rounded-lg transition-transform cursor-pointer ${
+                  className={`text-2xl p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
                     selectedAvatar === av
-                      ? 'bg-red-600/40 border-2 border-red-500 scale-110 shadow-md shadow-red-900/40'
-                      : 'hover:bg-slate-700/60 hover:scale-105'
+                      ? 'bg-red-600/30 border-2 border-red-500 scale-110 shadow-lg shadow-red-950/50'
+                      : 'hover:bg-slate-800 hover:scale-105 opacity-80 hover:opacity-100'
                   }`}
                 >
                   {av}
@@ -135,87 +198,61 @@ export default function Lobby({ onCreateRoom, onJoinRoom }) {
               ))}
             </div>
           </div>
-        </div>
 
-        {/* Buttons thao tác */}
-        <div className="space-y-3">
-          {invitedRoom ? (
-            <>
-              <button
-                onClick={handleJoin}
-                disabled={loading}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-slate-950 font-black shadow-xl shadow-orange-950/60 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98 disabled:opacity-50 text-base"
-              >
-                <LogIn className="w-5 h-5" />
-                VÀO PHÒNG NGAY ({invitedRoom})
-              </button>
-
-              <div className="flex items-center my-2">
-                <div className="flex-1 border-t border-slate-800"></div>
-                <span className="px-3 text-xs text-slate-500 font-medium uppercase">Hoặc</span>
-                <div className="flex-1 border-t border-slate-800"></div>
-              </div>
-
-              <button
-                onClick={handleCreate}
-                disabled={loading}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition text-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Tự Tạo Phòng Mới Khác
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handleCreate}
-                disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold shadow-lg shadow-red-900/30 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98 disabled:opacity-50"
-              >
-                <Plus className="w-5 h-5" />
-                Tạo Phòng Mới
-              </button>
-
-              <div className="flex items-center my-3">
-                <div className="flex-1 border-t border-slate-800"></div>
-                <span className="px-3 text-xs text-slate-500 font-medium uppercase">Hoặc vào phòng</span>
-                <div className="flex-1 border-t border-slate-800"></div>
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={roomCode}
-                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  placeholder="MÃ PHÒNG (VD: WOLF88)"
-                  maxLength={6}
-                  className="flex-1 px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-amber-400 font-mono tracking-widest placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-center font-bold text-sm"
-                />
-                <button
-                  onClick={handleJoin}
-                  disabled={loading}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-950/40 flex items-center gap-1.5 cursor-pointer transition transform active:scale-98 disabled:opacity-50 text-sm"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Vào
-                </button>
-              </div>
-            </>
+          {/* Nếu ở Tab Join: Nhập mã phòng */}
+          {tab === 'join' && (
+            <div className="animate-fadeIn">
+              <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+                Mã Phòng (6 Ký Tự)
+              </label>
+              <input
+                type="text"
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                placeholder="VD: WOLF88"
+                maxLength={6}
+                className="w-full px-4 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-amber-400 font-mono tracking-widest placeholder-slate-500 focus:outline-none focus:border-indigo-500 text-center font-black text-lg uppercase shadow-inner"
+              />
+            </div>
           )}
         </div>
 
-        {/* Banner tiện ích */}
-        <div className="mt-6 pt-4 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px] text-slate-400 text-center">
-          <div className="flex items-center justify-center gap-1.5 bg-slate-800/40 p-2 rounded-lg border border-slate-700/40">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Tích hợp Bot AI thông minh</span>
+        {/* Nút Action Chính (1-Click) */}
+        <div>
+          {tab === 'create' ? (
+            <button
+              onClick={handleCreate}
+              disabled={loading}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-sm uppercase tracking-wider shadow-lg shadow-red-950/60 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98 disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{loading ? 'Đang Khởi Tạo...' : 'Tạo Phòng Chơi Ngay'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleJoin}
+              disabled={loading}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-sm uppercase tracking-wider shadow-lg shadow-indigo-950/60 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98 disabled:opacity-50"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>{loading ? 'Đang Vào Phòng...' : 'Vào Phòng Ngay'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Feature Highlights */}
+        <div className="pt-3 border-t border-slate-800 grid grid-cols-2 gap-2 text-[11px] text-slate-400 text-center">
+          <div className="flex items-center justify-center gap-1.5 bg-slate-950/40 p-2 rounded-xl border border-slate-800/60">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Bot AI thông minh</span>
           </div>
-          <div className="flex items-center justify-center gap-1.5 bg-slate-800/40 p-2 rounded-lg border border-slate-700/40">
-            <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Phân vai tự động & chống gian lận</span>
+          <div className="flex items-center justify-center gap-1.5 bg-slate-950/40 p-2 rounded-xl border border-slate-800/60">
+            <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Chống gian lận 100%</span>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

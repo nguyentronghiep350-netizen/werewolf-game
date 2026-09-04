@@ -50,6 +50,14 @@ export class GameState {
 
     // Danh sách người chết đêm qua để hiển thị ở Morning
     this.nightDeaths = [];
+
+    // Trạng thái từng lượt gọi vai trò ban đêm (Sequential Night Turns)
+    this.nightQueue = [];
+    this.currentNightStepIndex = -1;
+    this.activeNightStep = null;
+    this.activeNightRole = null;
+    this.activeNightTitle = null;
+    this.activeNightPrompt = null;
   }
 
   addLog(type, message, details = {}) {
@@ -141,6 +149,82 @@ export class GameState {
     });
   }
 
+  // Xây dựng danh sách các bước gọi ban đêm theo thứ tự logic
+  buildNightQueue() {
+    const queue = [];
+    const alivePlayers = this.getAlivePlayers();
+    const aliveRoles = alivePlayers.map((p) => p.role);
+
+    // 1. Thần Tình Yêu (Cupid) - chỉ đêm 1
+    if (this.nightNumber === 1 && aliveRoles.includes(ROLES.CUPID)) {
+      queue.push({
+        id: 'cupid',
+        role: ROLES.CUPID,
+        title: 'Thần Tình Yêu (The Cupid VI)',
+        prompt: 'Thần Tình Yêu hãy thức dậy! Hãy giương cung kết đôi 2 người chơi định mệnh...',
+        duration: 18,
+      });
+    }
+
+    // 2. Bảo Vệ (Bodyguard)
+    if (aliveRoles.includes(ROLES.BODYGUARD)) {
+      queue.push({
+        id: 'bodyguard',
+        role: ROLES.BODYGUARD,
+        title: 'Bảo Vệ (The Guardian V)',
+        prompt: 'Hiệp Sĩ Bảo Vệ hãy thức dậy! Chọn 1 người bạn muốn dùng khiên thánh bảo hộ đêm nay...',
+        duration: 15,
+      });
+    }
+
+    // 3. Bầy Ma Sói (Werewolves)
+    const hasWolves = aliveRoles.some((r) => isWerewolfRole(r));
+    if (hasWolves) {
+      queue.push({
+        id: 'werewolf',
+        role: 'werewolf',
+        title: 'Bầy Ma Sói (The Werewolves 0)',
+        prompt: 'Bầy Ma Sói hãy thức giấc! Mở nanh vuốt và thống nhất chọn 1 con mồi đêm nay...',
+        duration: 22,
+      });
+    }
+
+    // 4. Sói Trắng (White Wolf) - đêm chẵn 2, 4...
+    if (aliveRoles.includes(ROLES.WHITE_WOLF) && this.nightNumber % 2 === 0) {
+      queue.push({
+        id: 'white_wolf',
+        role: ROLES.WHITE_WOLF,
+        title: 'Sói Trắng Đơn Độc (The White Wolf XIII)',
+        prompt: 'Bạch Lang Sói Trắng hãy thức dậy! Bạn có muốn cắn chết 1 con sói khác đêm nay không?',
+        duration: 15,
+      });
+    }
+
+    // 5. Tiên Tri (Seer)
+    if (aliveRoles.includes(ROLES.SEER)) {
+      queue.push({
+        id: 'seer',
+        role: ROLES.SEER,
+        title: 'Tiên Tri (The Seer II)',
+        prompt: 'Tiên Tri thông thái hãy thức dậy! Mở nhãn quan và soi sáng danh tính 1 người...',
+        duration: 15,
+      });
+    }
+
+    // 6. Phù Thủy (Witch)
+    if (aliveRoles.includes(ROLES.WITCH)) {
+      queue.push({
+        id: 'witch',
+        role: ROLES.WITCH,
+        title: 'Phù Thủy (The Witch XIV)',
+        prompt: 'Phù Thủy hãy thức dậy! Xem nạn nhân bị sói cắn và quyết định dùng bình thuốc...',
+        duration: 18,
+      });
+    }
+
+    return queue;
+  }
+
   // Vào Ban Đêm
   enterNight() {
     this.nightNumber++;
@@ -156,24 +240,72 @@ export class GameState {
       witchKillTarget: null,
     };
     this.nightDeaths = [];
+    this.nightQueue = this.buildNightQueue();
+    this.currentNightStepIndex = -1;
+    this.activeNightStep = null;
+    this.activeNightRole = null;
+    this.activeNightTitle = 'Màn Đêm Buông Xuống';
+    this.activeNightPrompt = 'Đêm đã buông xuống, sương mù bao phủ ngôi làng. Mọi người hãy chìm vào giấc ngủ...';
 
     this.addLog('night', `Đêm thứ ${this.nightNumber} buông xuống... Tiếng sói hú xé toạc màn đêm tĩnh mịch.`);
     this.room.broadcastState();
 
-    // 3 giây mở màn ban đêm với âm thanh trăng sao rùng rợn, sau đó sang NIGHT_ACTION
+    // 3 giây mở màn ban đêm với âm thanh trăng sao rùng rợn, sau đó bắt đầu đợt gọi đầu tiên
     this.startTimer(3, null, () => {
       this.phase = PHASES.NIGHT_ACTION;
-      this.room.broadcastState();
-
-      // Bot AI thực hiện hành vi ban đêm
-      this.room.triggerBotNightActions();
-
-      // Thời gian ban đêm theo cấu hình phòng (mặc định 30s)
-      const duration = this.room.config.nightDuration || 30;
-      this.startTimer(duration, null, () => {
+      if (this.nightQueue.length > 0) {
+        this.advanceNightStep();
+      } else {
         this.resolveNight();
-      });
+      }
     });
+  }
+
+  // Chuyển sang lượt gọi vai trò tiếp theo
+  advanceNightStep() {
+    this.clearTimer();
+    this.currentNightStepIndex++;
+
+    if (!this.nightQueue || this.currentNightStepIndex >= this.nightQueue.length) {
+      // Đã gọi hết tất cả vai trò ban đêm -> Tiến hành resolveNight
+      this.activeNightStep = null;
+      this.activeNightRole = null;
+      this.activeNightTitle = 'Bình Minh Lên';
+      this.activeNightPrompt = 'Trời đã rạng sáng, dân làng hãy thức giấc!';
+      this.resolveNight();
+      return;
+    }
+
+    const step = this.nightQueue[this.currentNightStepIndex];
+    this.activeNightStep = step.id;
+    this.activeNightRole = step.role;
+    this.activeNightTitle = step.title;
+    this.activeNightPrompt = step.prompt;
+
+    this.addLog('night', `Quản trò gọi: ${step.title}`, { secret: true });
+
+    // Nếu là lượt Phù Thủy, gửi ngay thông tin nạn nhân bị Sói cắn
+    if (step.id === 'witch') {
+      this.notifyWitchCurrentVictim();
+    }
+
+    this.room.broadcastState();
+
+    // Kích hoạt Bot cho vai trò này nếu có
+    this.room.triggerBotNightActionForRole(step.role);
+
+    // Bắt đầu đếm ngược cho bước này
+    const duration = step.duration || 15;
+    this.startTimer(duration, null, () => {
+      this.advanceNightStep();
+    });
+  }
+
+  // Nhảy tới bước chỉ định (Dành cho Quản trò God mode)
+  startNightStep(stepIndex) {
+    this.clearTimer();
+    this.currentNightStepIndex = stepIndex - 1;
+    this.advanceNightStep();
   }
 
   // Xử lý các hành động ban đêm của người chơi
@@ -280,6 +412,12 @@ export class GameState {
       return true;
     }
 
+    // 6. Phù Thủy chọn xong / bỏ qua
+    if (player.role === ROLES.WITCH && action === 'witch_pass') {
+      this.checkAllNightActionsComplete();
+      return true;
+    }
+
     return false;
   }
 
@@ -312,29 +450,67 @@ export class GameState {
     }
   }
 
-  // Tự động kiểm tra xem các vai trò còn sống đã submit hết chưa để kết thúc đêm sớm
+  // Tự động kiểm tra xem vai trò hiện tại đã hoàn thành chưa để rút ngắn chuyển bước sớm
   checkAllNightActionsComplete() {
+    // Nếu đang ở lượt Cupid
+    if (this.activeNightStep === 'cupid') {
+      const aliveCupid = this.room.players.find((p) => p.isAlive && p.role === ROLES.CUPID);
+      if (aliveCupid && this.nightActions.cupidTarget1 && this.nightActions.cupidTarget2) {
+        if (this.timer > 2) this.timer = 2;
+      }
+      return;
+    }
+
+    // Nếu đang ở lượt Bảo Vệ
+    if (this.activeNightStep === 'bodyguard') {
+      const aliveBodyguard = this.room.players.find((p) => p.isAlive && p.role === ROLES.BODYGUARD);
+      if (aliveBodyguard && this.nightActions.bodyguardTarget) {
+        if (this.timer > 2) this.timer = 2;
+      }
+      return;
+    }
+
+    // Nếu đang ở lượt Bầy Sói
+    if (this.activeNightStep === 'werewolf') {
+      const aliveWolves = this.getAliveWerewolves();
+      if (aliveWolves.length > 0 && Object.keys(this.nightActions.werewolfVotes).length >= aliveWolves.length) {
+        if (this.timer > 2) this.timer = 2;
+      }
+      return;
+    }
+
+    // Nếu đang ở lượt Tiên Tri
+    if (this.activeNightStep === 'seer') {
+      const aliveSeer = this.room.players.find((p) => p.isAlive && p.role === ROLES.SEER);
+      if (aliveSeer && this.nightActions.seerTarget) {
+        if (this.timer > 3) this.timer = 3;
+      }
+      return;
+    }
+
+    // Nếu đang ở lượt Phù Thủy
+    if (this.activeNightStep === 'witch') {
+      if (this.timer > 2) this.timer = 2;
+      return;
+    }
+
+    // Dự phòng khi chạy tất cả cùng lúc
     const aliveCupid = this.room.players.find((p) => p.isAlive && p.role === ROLES.CUPID);
     if (this.nightNumber === 1 && aliveCupid && (!this.nightActions.cupidTarget1 || !this.nightActions.cupidTarget2)) {
       return;
     }
-
     const aliveBodyguard = this.room.players.find((p) => p.isAlive && p.role === ROLES.BODYGUARD);
     if (aliveBodyguard && !this.nightActions.bodyguardTarget) {
       return;
     }
-
     const aliveWolves = this.getAliveWerewolves();
     if (aliveWolves.length > 0 && Object.keys(this.nightActions.werewolfVotes).length < aliveWolves.length) {
       return;
     }
-
     const aliveSeer = this.room.players.find((p) => p.isAlive && p.role === ROLES.SEER);
     if (aliveSeer && !this.nightActions.seerTarget) {
       return;
     }
-
-    // Nếu tất cả đã hoàn thành, có thể rút ngắn timer còn 2 giây để chuyển phase
     if (this.timer > 2) {
       this.timer = 2;
     }
@@ -790,6 +966,13 @@ export class GameState {
       currentScriptStep: this.currentScriptStep || 0,
       aiTip,
       isGodModerator: !!isGodModerator,
+      // Dữ liệu từng lượt gọi ban đêm tuần tự
+      activeNightStep: this.activeNightStep || null,
+      activeNightRole: this.activeNightRole || null,
+      activeNightTitle: this.activeNightTitle || null,
+      activeNightPrompt: this.activeNightPrompt || null,
+      currentNightStepIndex: this.currentNightStepIndex >= 0 ? this.currentNightStepIndex : 0,
+      totalNightSteps: this.nightQueue ? this.nightQueue.length : 0,
       players: this.room.players.map((p) => {
         // Chỉ hiện vai trò nếu game over, hoặc là Quản trò người thật (God mode), hoặc là chính mình, hoặc là sói nhìn thấy đồng bọn
         const showRole =
