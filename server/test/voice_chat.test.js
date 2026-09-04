@@ -89,30 +89,38 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('voice:leave', () => {
-    const room = roomManager.getRoomByPlayerId(socket.id);
+  const cleanupPlayerVoice = (socketId) => {
+    const room = roomManager.getRoomByPlayerId(socketId);
     if (room) {
-      const player = room.players.find((p) => p.id === socket.id);
+      const player = room.players.find((p) => p.id === socketId);
       if (player) {
         player.inVoice = false;
         player.isSpeaking = false;
       }
       for (const p of room.players) {
-        if (p.socket && p.id !== socket.id) {
-          p.socket.emit('voice:peer_left', { peerId: socket.id });
-        }
-        if (p.socket) {
+        if (p.socket && p.id !== socketId) {
+          p.socket.emit('voice:peer_left', { peerId: socketId });
           p.socket.emit('voice:player_state_changed', {
-            playerId: socket.id,
+            playerId: socketId,
             inVoice: false,
             isSpeaking: false,
           });
         }
       }
     }
+  };
+
+  socket.on('room:leave', () => {
+    cleanupPlayerVoice(socket.id);
+    roomManager.leaveRoom(socket.id);
+  });
+
+  socket.on('voice:leave', () => {
+    cleanupPlayerVoice(socket.id);
   });
 
   socket.on('disconnect', () => {
+    cleanupPlayerVoice(socket.id);
     roomManager.leaveRoom(socket.id);
   });
 });
@@ -194,6 +202,19 @@ server.listen(0, async () => {
     const peerLeftData = await peerLeftPromise;
     assert.strictEqual(peerLeftData.peerId, hostSocket.id);
     console.log('✓ Rời Voice Chat và dọn dẹp kết nối thành công');
+
+    // 7. Host join lại voice chat, sau đó Player 2 out khỏi phòng (room:leave)
+    // Host phải lập tức nhận được voice:peer_left để ngắt kết nối WebRTC!
+    hostSocket.emit('voice:join');
+    await new Promise((r) => setTimeout(r, 50));
+
+    const roomLeavePeerLeftPromise = new Promise((resolve) => {
+      hostSocket.once('voice:peer_left', resolve);
+    });
+    player2Socket.emit('room:leave');
+    const roomLeavePeerLeftData = await roomLeavePeerLeftPromise;
+    assert.strictEqual(roomLeavePeerLeftData.peerId, player2Socket.id, 'Host không nhận được thông báo peer_left khi Player 2 rời phòng');
+    console.log('✓ Player 2 out khỏi phòng (room:leave), Host lập tức nhận voice:peer_left để ngắt kết nối WebRTC audio!');
 
     console.log('=============================================');
     console.log('🎉 TẤT CẢ CÁC BÀI TEST WEBRTC SIGNALING ĐẠT 100%! 🎉');

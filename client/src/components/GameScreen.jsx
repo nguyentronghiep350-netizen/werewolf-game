@@ -199,10 +199,10 @@ export default function GameScreen({
         <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 md:p-5 backdrop-blur-xl shadow-xl">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
             <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              BÀN TRÒN DÂN LÀNG ({players.filter((p) => p.isAlive).length}/{players.length} CÒN SỐNG)
+              BÀN TRÒN DÂN LÀNG ({players.filter((p) => p.isAlive && p.role !== 'moderator').length}/{players.filter((p) => p.role !== 'moderator').length} CÒN SỐNG)
             </h3>
             <span className="text-xs text-slate-500">
-              {players.filter((p) => !p.isAlive).length} Đã chết
+              {players.filter((p) => !p.isAlive && p.role !== 'moderator').length} Đã chết
             </span>
           </div>
 
@@ -278,7 +278,11 @@ export default function GameScreen({
                   </span>
 
                   {/* Hiển thị vai trò nếu đã chết hoặc được reveal */}
-                  {p.role ? (
+                  {p.role === 'moderator' ? (
+                    <span className="text-[10px] font-bold text-amber-400 mt-0.5 truncate flex items-center justify-center gap-1">
+                      👑 Quản Trò
+                    </span>
+                  ) : p.role ? (
                     <span
                       className="text-[10px] font-semibold mt-0.5 truncate"
                       style={{ color: p.roleDetails?.color || '#38bdf8' }}
@@ -303,8 +307,26 @@ export default function GameScreen({
           </div>
         </div>
 
+        {/* Banner Quản Trò Toàn Năng nếu bản thân là Quản Trò */}
+        {myRole === 'moderator' && (
+          <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-lg flex items-center justify-between gap-3 text-xs animate-fadeIn">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">👑</span>
+              <div>
+                <p className="font-bold text-amber-300 uppercase tracking-wide">BẠN ĐANG LÀ QUẢN TRÒ TOÀN NĂNG (GAME MASTER)</p>
+                <p className="text-slate-300 text-[11px] mt-0.5">
+                  Bạn là trọng tài công tâm của làng. Mở <strong>Bảng Quản Trò</strong> ở góc dưới để kích hoạt lời thoại AI, chuyển đổi ngày/đêm và xử lý sự kiện!
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-[11px] font-bold border border-amber-500/30 whitespace-nowrap">
+              God Mode Active
+            </span>
+          </div>
+        )}
+
         {/* Panel Hành Động Ban Đêm */}
-        {isNight && (
+        {isNight && myRole !== 'moderator' && (
           <NightActionPanel
             myRole={myRole}
             isAlive={isAlive}
@@ -318,7 +340,7 @@ export default function GameScreen({
         )}
 
         {/* Panel Bỏ Phiếu & Thảo Luận Ban Ngày */}
-        {(phase === 'DAY_DISCUSSION' || phase === 'DAY_VOTING') && (
+        {(phase === 'DAY_DISCUSSION' || phase === 'DAY_VOTING') && myRole !== 'moderator' && (
           <VotingPanel
             phase={phase}
             players={players}

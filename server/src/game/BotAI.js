@@ -1,4 +1,4 @@
-import { ROLES, TEAMS, ROLE_DEFINITIONS } from './RoleManager.js';
+import { ROLES, TEAMS, ROLE_DEFINITIONS, isWerewolfRole } from './RoleManager.js';
 
 export const BOT_NAMES = [
   'An Nhiên',
@@ -92,10 +92,10 @@ export class BotAI {
       }
 
       // 4. Bot Ma Sói (Werewolves)
-      const botWolves = botPlayers.filter((p) => p.role === ROLES.WEREWOLF);
+      const botWolves = botPlayers.filter((p) => isWerewolfRole(p.role));
       if (botWolves.length > 0) {
         // Tìm các nạn nhân không phải là sói
-        const nonWolves = this.room.players.filter((p) => p.isAlive && p.role !== ROLES.WEREWOLF);
+        const nonWolves = this.room.players.filter((p) => p.isAlive && !isWerewolfRole(p.role));
         if (nonWolves.length > 0) {
           // Ưu tiên cắn người chơi thật nếu có
           const humanTarget = nonWolves.find((p) => !p.isBot);
@@ -182,7 +182,7 @@ export class BotAI {
         const aliveOthers = this.room.players.filter((p) => p.isAlive && p.id !== bot.id);
         const randomOther = aliveOthers.length > 0 ? aliveOthers[Math.floor(Math.random() * aliveOthers.length)] : null;
 
-        if (bot.role === ROLES.WEREWOLF) {
+        if (isWerewolfRole(bot.role)) {
           const wolfQuotes = [
             `Mọi người thấy đêm qua thế nào? Tôi là dân lương thiện nhé!`,
             randomOther ? `Tôi thấy ${randomOther.name} nãy giờ im hơi lặng tiếng rất khả nghi nha!` : `Hôm nay phải tìm đúng sói mới được!`,
@@ -235,9 +235,9 @@ export class BotAI {
 
         let targetId = 'skip';
 
-        if (bot.role === ROLES.WEREWOLF) {
+        if (isWerewolfRole(bot.role)) {
           // Sói bot không bao giờ vote đồng đội sói
-          const nonWolves = aliveOthers.filter((p) => p.role !== ROLES.WEREWOLF);
+          const nonWolves = aliveOthers.filter((p) => !isWerewolfRole(p.role));
           if (nonWolves.length > 0) {
             targetId = nonWolves[Math.floor(Math.random() * nonWolves.length)].id;
           }

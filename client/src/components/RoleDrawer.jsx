@@ -39,7 +39,7 @@ export default function RoleDrawer({ myRole, myRoleDetails, isAlive, loverPartne
                 {myRoleDetails.name}
               </span>
               <span className="text-[10px] px-2 py-0.2 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                {myRoleDetails.team === 'werewolf' ? 'Phe Sói 🐺' : myRoleDetails.team === 'village' ? 'Phe Dân 🧑‍🌾' : 'Phe Thứ 3 🎭'}
+                {myRoleDetails.team === 'werewolf' ? 'Phe Sói 🐺' : myRoleDetails.team === 'village' ? 'Phe Dân 🧑‍🌾' : myRoleDetails.team === 'moderator' ? 'Quản Trò 👑' : 'Phe Thứ 3 🎭'}
               </span>
             </div>
 

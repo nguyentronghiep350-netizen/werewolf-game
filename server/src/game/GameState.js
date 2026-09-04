@@ -1,4 +1,4 @@
-import { ROLES, TEAMS, ROLE_DEFINITIONS } from './RoleManager.js';
+import { ROLES, TEAMS, ROLE_DEFINITIONS, isWerewolfRole } from './RoleManager.js';
 import { AIModerator } from './AIModerator.js';
 
 export const PHASES = {
@@ -46,6 +46,7 @@ export class GameState {
     // Trạng thái thợ săn bắn trả thù
     this.hunterPending = null; // playerId của thợ săn đang phải bắn
     this.hunterPendingReason = null; // 'night' | 'day'
+    this.hunterQueue = []; // hàng đợi thợ săn nếu nhiều thợ săn chết cùng lúc
 
     // Danh sách người chết đêm qua để hiển thị ở Morning
     this.nightDeaths = [];
@@ -88,15 +89,39 @@ export class GameState {
   }
 
   getAlivePlayers() {
-    return this.room.players.filter((p) => p.isAlive);
+    return this.room.players.filter((p) => p.isAlive && p.role !== ROLES.MODERATOR);
   }
 
   getAliveWerewolves() {
-    return this.room.players.filter((p) => p.isAlive && p.role === ROLES.WEREWOLF);
+    return this.room.players.filter((p) => p.isAlive && isWerewolfRole(p.role));
   }
 
   getPlayer(playerId) {
     return this.room.players.find((p) => p.id === playerId);
+  }
+
+  // Thêm Thợ Săn vào hàng đợi bắn trả thù
+  queueHunterShot(hunterPlayer, reason = 'day') {
+    if (!hunterPlayer || hunterPlayer.role !== ROLES.HUNTER || hunterPlayer.hunterShotUsed) return;
+    if (this.hunterPending === hunterPlayer.id) return;
+    if (this.hunterQueue.some((item) => item.id === hunterPlayer.id)) return;
+    this.hunterQueue.push({ id: hunterPlayer.id, reason });
+  }
+
+  // Kích hoạt lượt bắn của Thợ Săn tiếp theo nếu có
+  checkAndTriggerHunterTurn() {
+    if (this.hunterPending) {
+      this.enterHunterTurn();
+      return true;
+    }
+    if (this.hunterQueue.length > 0) {
+      const next = this.hunterQueue.shift();
+      this.hunterPending = next.id;
+      this.hunterPendingReason = next.reason;
+      this.enterHunterTurn();
+      return true;
+    }
+    return false;
   }
 
   // Khởi động ván game mới
@@ -197,7 +222,7 @@ export class GameState {
     }
 
     // 3. Ma Sói (Werewolf) vote cắn
-    if (player.role === ROLES.WEREWOLF && action === 'werewolf_vote') {
+    if (isWerewolfRole(player.role) && action === 'werewolf_vote') {
       const target = this.getPlayer(targetId);
       if (target && target.isAlive) {
         this.nightActions.werewolfVotes[player.id] = target.id;
@@ -228,7 +253,7 @@ export class GameState {
           role: target.role,
           roleName: targetRoleDef.name,
           team: targetRoleDef.team,
-          isWerewolf: target.role === ROLES.WEREWOLF,
+          isWerewolf: isWerewolfRole(target.role) && target.role !== ROLES.TRAITOR,
         };
         this.nightActions.seerResult = result;
 
@@ -385,13 +410,15 @@ export class GameState {
     }
 
     // 4. Kiểm tra xem có Thợ Săn chết không
-    const deadHunter = this.nightDeaths.find((d) => d.role === ROLES.HUNTER);
-    if (deadHunter) {
-      const hunterPlayer = this.getPlayer(deadHunter.id);
-      if (hunterPlayer && !hunterPlayer.hunterShotUsed) {
-        this.hunterPending = hunterPlayer.id;
-        this.hunterPendingReason = 'night';
-      }
+    const deadHunters = this.nightDeaths.filter((d) => d.role === ROLES.HUNTER);
+    for (const d of deadHunters) {
+      const hunterPlayer = this.getPlayer(d.id);
+      this.queueHunterShot(hunterPlayer, 'night');
+    }
+    if (!this.hunterPending && this.hunterQueue.length > 0) {
+      const next = this.hunterQueue.shift();
+      this.hunterPending = next.id;
+      this.hunterPendingReason = next.reason;
     }
 
     // Chuyển sang MORNING
@@ -419,8 +446,7 @@ export class GameState {
     this.room.broadcastState();
 
     // Nếu có Thợ Săn kích hoạt bắn trả thù
-    if (this.hunterPending) {
-      this.enterHunterTurn();
+    if (this.checkAndTriggerHunterTurn()) {
       return;
     }
 
@@ -483,7 +509,15 @@ export class GameState {
         if (lover && lover.isAlive) {
           this.killPlayer(lover, 'Tự sát vì quá đau buồn khi người yêu qua đời');
           this.addLog('death', `${lover.name} (${ROLE_DEFINITIONS[lover.role].name}) đã tự sát theo người yêu!`);
+          if (lover.role === ROLES.HUNTER) {
+            this.queueHunterShot(lover, this.hunterPendingReason || 'day');
+          }
         }
+      }
+
+      // Nếu target bị thợ săn bắn cũng là Thợ Săn
+      if (target.role === ROLES.HUNTER) {
+        this.queueHunterShot(target, this.hunterPendingReason || 'day');
       }
     } else {
       this.addLog('system', `Thợ Săn đã không kịp nhả đạn trước khi trút hơi thở cuối cùng.`);
@@ -492,6 +526,11 @@ export class GameState {
     this.room.broadcastState();
 
     if (this.checkWinCondition()) return;
+
+    // Nếu còn Thợ Săn khác trong hàng đợi
+    if (this.checkAndTriggerHunterTurn()) {
+      return;
+    }
 
     if (this.hunterPendingReason === 'night') {
       this.enterDayDiscussion();
@@ -638,20 +677,21 @@ export class GameState {
         if (lover && lover.isAlive) {
           this.killPlayer(lover, 'Tự sát vì quá đau buồn khi người yêu qua đời');
           this.addLog('death', `${lover.name} (${ROLE_DEFINITIONS[lover.role].name}) đã tự sát theo người tình chung số phận!`);
+          if (lover.role === ROLES.HUNTER) {
+            this.queueHunterShot(lover, 'day');
+          }
         }
       }
 
       // Nếu là Thợ Săn
-      if (executedPlayer.role === ROLES.HUNTER && !executedPlayer.hunterShotUsed) {
-        this.hunterPending = executedPlayer.id;
-        this.hunterPendingReason = 'day';
+      if (executedPlayer.role === ROLES.HUNTER) {
+        this.queueHunterShot(executedPlayer, 'day');
       }
     }
 
     this.room.broadcastState();
 
-    if (this.hunterPending) {
-      this.enterHunterTurn();
+    if (this.checkAndTriggerHunterTurn()) {
       return;
     }
 
@@ -667,15 +707,15 @@ export class GameState {
   checkWinCondition() {
     const alivePlayers = this.getAlivePlayers();
     const aliveWolves = this.getAliveWerewolves();
-    const aliveNonWolves = alivePlayers.filter((p) => p.role !== ROLES.WEREWOLF);
+    const aliveNonWolves = alivePlayers.filter((p) => !isWerewolfRole(p.role));
 
     // 1. Cặp đôi Lovers thắng đặc biệt
     // Nếu còn đúng 2 người sống sót và họ là Cặp đôi Lovers khác phe (1 Sói 1 Dân)
     if (alivePlayers.length === 2 && alivePlayers[0].loverId === alivePlayers[1].id) {
       const p1 = alivePlayers[0];
       const p2 = alivePlayers[1];
-      const p1IsWolf = p1.role === ROLES.WEREWOLF;
-      const p2IsWolf = p2.role === ROLES.WEREWOLF;
+      const p1IsWolf = isWerewolfRole(p1.role);
+      const p2IsWolf = isWerewolfRole(p2.role);
 
       if ((p1IsWolf && !p2IsWolf) || (!p1IsWolf && p2IsWolf)) {
         this.winner = TEAMS.LOVERS;
@@ -723,7 +763,7 @@ export class GameState {
   // Xuất dữ liệu game công khai (loại bỏ thông tin bí mật)
   getPublicState(forPlayerId = null) {
     const requestingPlayer = forPlayerId ? this.getPlayer(forPlayerId) : null;
-    const isWolf = requestingPlayer && requestingPlayer.role === ROLES.WEREWOLF;
+    const isWolf = requestingPlayer && isWerewolfRole(requestingPlayer.role);
     const isGodModerator = this.room.config.moderatorMode === 'human' && requestingPlayer && requestingPlayer.isHost;
 
     // Sinh kịch bản gọi ban đêm dựa trên các lá bài thực tế có trong phòng
@@ -753,11 +793,12 @@ export class GameState {
       players: this.room.players.map((p) => {
         // Chỉ hiện vai trò nếu game over, hoặc là Quản trò người thật (God mode), hoặc là chính mình, hoặc là sói nhìn thấy đồng bọn
         const showRole =
+          p.role === ROLES.MODERATOR ||
           isGodModerator ||
           this.phase === PHASES.GAME_OVER ||
           p.id === forPlayerId ||
           (!p.isAlive && this.phase !== PHASES.NIGHT_ACTION) ||
-          (isWolf && p.role === ROLES.WEREWOLF);
+          (isWolf && isWerewolfRole(p.role));
 
         return {
           id: p.id,

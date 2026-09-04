@@ -74,11 +74,12 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
       document.body.appendChild(container);
     }
   }, []);
+  const isWolfRole = useCallback((role) => ['werewolf', 'alpha_wolf', 'white_wolf', 'wolf_pup'].includes(role), []);
 
-  // Xác định kênh thoại dựa trên trạng thái game và vai trò
+  // Tự động chuyển đổi Voice Channel theo trạng thái Game
   useEffect(() => {
-    if (!gameState || gameState.phase === 'LOBBY') {
-      setActiveChannel('LOBBY');
+    if (!gameState) {
+      setActiveChannel('VILLAGE');
       return;
     }
 
@@ -88,8 +89,8 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
     }
 
     const phase = gameState.phase;
-    if (phase === 'NIGHT') {
-      if (myRole === 'werewolf') {
+    if (phase?.startsWith('NIGHT') || phase === 'NIGHT') {
+      if (isWolfRole(myRole)) {
         setActiveChannel('WEREWOLF');
       } else {
         setActiveChannel('SLEEP');
@@ -97,7 +98,7 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
     } else {
       setActiveChannel('VILLAGE');
     }
-  }, [gameState, isAlive, myRole]);
+  }, [gameState, isAlive, myRole, isWolfRole]);
 
   // Cập nhật số lượng peer đã kết nối P2P thành công
   const updateConnectedCount = useCallback(() => {
@@ -130,8 +131,8 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
           targetVolume = 1.0;
         } else if (!peer.isAlive) {
           targetVolume = 0;
-        } else if (phase === 'NIGHT') {
-          targetVolume = (myRole === 'werewolf' && peer.role === 'werewolf') ? 1.0 : 0;
+        } else if (phase?.startsWith('NIGHT') || phase === 'NIGHT') {
+          targetVolume = (isWolfRole(myRole) && isWolfRole(peer.role)) ? 1.0 : 0;
         } else {
           targetVolume = 1.0;
         }
@@ -639,6 +640,13 @@ export function useVoiceChat({ roomCode, myId, myRole, isAlive, gameState }) {
       socket.off('voice:peer_left', handlePeerLeft);
     };
   }, [createPeerConnection]);
+
+  // Tự động dọn dẹp và ngắt voice khi không còn trong phòng (roomCode rỗng hoặc rời phòng)
+  useEffect(() => {
+    if (!roomCode && inVoice) {
+      leaveVoice();
+    }
+  }, [roomCode, inVoice, leaveVoice]);
 
   // Dọn dẹp khi unmount
   useEffect(() => {

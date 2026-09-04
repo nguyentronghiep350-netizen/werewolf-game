@@ -129,6 +129,11 @@ export default function App() {
   };
 
   const handleLeaveRoom = () => {
+    try {
+      voiceChat.leaveVoice();
+    } catch (e) {
+      console.warn('Error leaving voice on room leave:', e);
+    }
     socket.emit('room:leave');
     setInRoom(false);
     setRoomCode('');
@@ -248,7 +253,7 @@ export default function App() {
       </main>
 
       {/* Bảng Quản Trò Toàn Năng (God Mode & AI Script cho Host) */}
-      {inRoom && !isLobbyPhase && isHost && (
+      {inRoom && !isLobbyPhase && isHost && (gameState?.isGodModerator || config?.moderatorMode === 'human' || myRole === 'moderator') && (
         <GameMasterPanel
           isHost={isHost}
           gameState={gameState}

@@ -40,8 +40,9 @@ export default function CustomDeckModal({
 
   if (!isOpen) return null;
 
+  const targetCount = moderatorMode === 'human' ? Math.max(1, playerCount - 1) : playerCount;
   const totalCards = Object.values(deck).reduce((a, b) => a + b, 0);
-  const diff = totalCards - playerCount;
+  const diff = totalCards - targetCount;
 
   const handleCountChange = (roleId, delta) => {
     soundFx.playClick();
@@ -113,12 +114,12 @@ export default function CustomDeckModal({
               <span className="text-slate-400">Tổng số thẻ:</span>
               <span
                 className={`text-base font-black font-mono px-2.5 py-0.5 rounded-lg border ${
-                  totalCards === playerCount
+                  totalCards === targetCount
                     ? 'bg-emerald-950 text-emerald-400 border-emerald-700'
                     : 'bg-amber-950 text-amber-400 border-amber-700'
                 }`}
               >
-                {totalCards} / {playerCount} người chơi
+                {totalCards} / {targetCount} thẻ {moderatorMode === 'human' ? `(${playerCount - 1} người + 1 Quản trò)` : `(${playerCount} người)`}
               </span>
             </div>
 

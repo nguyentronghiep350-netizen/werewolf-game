@@ -62,6 +62,28 @@ if (fs.existsSync(staticDir)) {
 io.on('connection', (socket) => {
   console.log(`[Socket Connected] ID: ${socket.id}`);
 
+  // Hàm dọn dẹp WebRTC Voice Chat khi người chơi rời phòng / ngắt kết nối
+  const cleanupPlayerVoice = (socketId) => {
+    const room = roomManager.getRoomByPlayerId(socketId);
+    if (room) {
+      const player = room.players.find((p) => p.id === socketId);
+      if (player) {
+        player.inVoice = false;
+        player.isSpeaking = false;
+      }
+      for (const p of room.players) {
+        if (p.socket && p.id !== socketId) {
+          p.socket.emit('voice:peer_left', { peerId: socketId });
+          p.socket.emit('voice:player_state_changed', {
+            playerId: socketId,
+            inVoice: false,
+            isSpeaking: false,
+          });
+        }
+      }
+    }
+  };
+
   // 1. Tạo phòng
   socket.on('room:create', ({ name, avatar }, callback) => {
     try {
@@ -87,6 +109,7 @@ io.on('connection', (socket) => {
 
   // 3. Rời phòng
   socket.on('room:leave', () => {
+    cleanupPlayerVoice(socket.id);
     roomManager.leaveRoom(socket.id);
   });
 
@@ -276,39 +299,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('voice:leave', () => {
-    const room = roomManager.getRoomByPlayerId(socket.id);
-    if (room) {
-      const player = room.players.find((p) => p.id === socket.id);
-      if (player) {
-        player.inVoice = false;
-        player.isSpeaking = false;
-      }
-      for (const p of room.players) {
-        if (p.socket && p.id !== socket.id) {
-          p.socket.emit('voice:peer_left', { peerId: socket.id });
-        }
-        if (p.socket) {
-          p.socket.emit('voice:player_state_changed', {
-            playerId: socket.id,
-            inVoice: false,
-            isSpeaking: false,
-          });
-        }
-      }
-    }
+    cleanupPlayerVoice(socket.id);
   });
 
   // Ngắt kết nối
   socket.on('disconnect', () => {
     console.log(`[Socket Disconnected] ID: ${socket.id}`);
-    const room = roomManager.getRoomByPlayerId(socket.id);
-    if (room) {
-      for (const p of room.players) {
-        if (p.socket && p.id !== socket.id) {
-          p.socket.emit('voice:peer_left', { peerId: socket.id });
-        }
-      }
-    }
+    cleanupPlayerVoice(socket.id);
     roomManager.leaveRoom(socket.id);
   });
 });

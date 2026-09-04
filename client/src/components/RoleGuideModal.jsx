@@ -1,5 +1,4 @@
-import React from 'react';
-import { X, Shield, Eye, Flame, Users, FlaskConical, Crosshair, Heart, Laugh } from 'lucide-react';
+import { X, Shield, Eye, Flame, Users, FlaskConical, Crosshair, Heart, Laugh, Crown } from 'lucide-react';
 
 export const ROLE_ICONS = {
   villager: Users,
@@ -15,6 +14,7 @@ export const ROLE_ICONS = {
   wolf_pup: Flame,
   traitor: Flame,
   reaper: SkullIcon,
+  moderator: Crown,
 };
 
 function SkullIcon(props) {
@@ -141,6 +141,16 @@ export const ROLE_DATA = [
     icon: Flame,
     desc: 'Mang hai bộ mặt: ban ngày là học giả thông thái, ban đêm là quái thú lăm lăm dao độc phản bội lại ngôi làng.',
     tips: 'Tiên tri soi Kẻ Phản Bội lúc đầu vẫn thấy là Dân làng cho đến khi thức tỉnh!',
+  },
+  {
+    id: 'moderator',
+    name: 'Quản Trò (The Game Master XXI)',
+    team: 'Quản Trò',
+    badgeColor: 'bg-amber-950 text-amber-300 border-amber-800',
+    cardImage: '/cards/moderator.jpg',
+    icon: Crown,
+    desc: 'Lá bài số 21 - Trọng tài toàn năng nắm giữ vận mệnh ngôi làng. Có quyền nhìn thấu tất cả các lá bài (God Mode), điều phối ngày/đêm và kích hoạt kịch bản AI thoại.',
+    tips: 'Giữ tính công bằng, sử dụng kịch bản AI để dẫn dắt câu chuyện tạo không khí bí ẩn và kịch tính cho người chơi!',
   },
 ];
 

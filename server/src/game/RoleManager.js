@@ -1,4 +1,5 @@
 export const ROLES = {
+  MODERATOR: 'moderator',
   VILLAGER: 'villager',
   WEREWOLF: 'werewolf',
   SEER: 'seer',
@@ -16,13 +17,37 @@ export const ROLES = {
 };
 
 export const TEAMS = {
+  MODERATOR: 'moderator',
   VILLAGE: 'village',
   WEREWOLF: 'werewolf',
   SOLO: 'solo',
   LOVERS: 'lovers',
 };
 
+export const WEREWOLF_ROLES = [
+  ROLES.WEREWOLF,
+  ROLES.ALPHA_WOLF,
+  ROLES.WHITE_WOLF,
+  ROLES.WOLF_PUP,
+];
+
+export function isWerewolfRole(role) {
+  return WEREWOLF_ROLES.includes(role);
+}
+
 export const ROLE_DEFINITIONS = {
+  [ROLES.MODERATOR]: {
+    id: ROLES.MODERATOR,
+    name: 'Quản Trò (The Game Master XXI)',
+    team: TEAMS.MODERATOR,
+    icon: 'Crown',
+    cardImage: '/cards/moderator.jpg',
+    color: '#f59e0b', // amber
+    description: 'Người dẫn dắt và điều phối trận đấu. Quan sát toàn bộ lá bài và giữ gìn trật tự ngôi làng.',
+    detailedLore: 'Vị thẩm phán toàn năng mang vương miện hoàng gia, tay cầm đồng hồ cát và bàn cân công lý dẫn dắt câu chuyện huyền bí.',
+    hasNightAction: false,
+    isModerator: true,
+  },
   [ROLES.VILLAGER]: {
     id: ROLES.VILLAGER,
     name: 'Dân Làng (The Villager I)',
@@ -185,7 +210,31 @@ export const ROLE_DEFINITIONS = {
  * @param {Array} players - Danh sách người chơi
  * @param {Object} roleConfig - Số lượng từng vai trò { werewolf: 1, seer: 1, ... }
  */
-export function assignRoles(players, roleConfig) {
+export function assignRoles(players, roleConfig, isHumanModerator = false) {
+  // Nếu là Quản Trò Người Thật, tách Chủ phòng ra làm Quản Trò Toàn Năng (không chia bài dân/sói cho Quản trò)
+  if (isHumanModerator) {
+    const hostPlayer = players.find((p) => p.isHost);
+    const nonHostPlayers = players.filter((p) => !p.isHost);
+    const assignedNonHost = assignRoles(nonHostPlayers, roleConfig, false);
+
+    if (hostPlayer) {
+      const hostModerator = {
+        ...hostPlayer,
+        role: ROLES.MODERATOR,
+        isAlive: true,
+        deathReason: null,
+        deathNight: null,
+        witchSaveUsed: false,
+        witchKillUsed: false,
+        hunterShotUsed: false,
+        lastProtectedId: null,
+        loverId: null,
+      };
+      return [hostModerator, ...assignedNonHost];
+    }
+    return assignedNonHost;
+  }
+
   const rolePool = [];
 
   // Đổ cấu hình vai trò vào pool

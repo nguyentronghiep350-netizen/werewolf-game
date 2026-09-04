@@ -1,6 +1,6 @@
 import { GameState, PHASES } from './GameState.js';
 import { BotAI, BOT_NAMES, BOT_AVATARS } from './BotAI.js';
-import { assignRoles, getDefaultRoleConfig, ROLES, TEAMS, ROLE_DEFINITIONS } from './RoleManager.js';
+import { assignRoles, getDefaultRoleConfig, ROLES, TEAMS, ROLE_DEFINITIONS, isWerewolfRole } from './RoleManager.js';
 
 export const GAME_MODES = {
   classic: {
@@ -248,7 +248,8 @@ export class GameRoom {
     }
 
     // Phân vai
-    this.players = assignRoles(this.players, this.config.roleConfig);
+    const isHumanMod = this.config.moderatorMode === 'human';
+    this.players = assignRoles(this.players, this.config.roleConfig, isHumanMod);
     this.botAI.initSuspicions();
 
     // Khởi động ván game
@@ -289,8 +290,12 @@ export class GameRoom {
   dealCards(playerId, roleConfig = null) {
     if (playerId !== this.hostId) return { success: false, message: 'Chỉ Chủ phòng mới có quyền chia bài!' };
     const configToUse = roleConfig || this.config.roleConfig;
-    this.players = assignRoles(this.players, configToUse);
-    this.gameState.addLog('system', `Chủ phòng đã xáo và chia bài ngẫu nhiên cho tất cả ${this.players.length} người chơi!`);
+    const isHumanMod = this.config.moderatorMode === 'human';
+    this.players = assignRoles(this.players, configToUse, isHumanMod);
+    const targetCount = isHumanMod ? this.players.length - 1 : this.players.length;
+    this.gameState.addLog('system', isHumanMod 
+      ? `Chủ phòng đóng vai trò Quản Trò và đã chia bài cho ${targetCount} người chơi!` 
+      : `Chủ phòng đã xáo và chia bài ngẫu nhiên cho tất cả ${this.players.length} người chơi!`);
     this.broadcastState();
     return { success: true };
   }
@@ -337,7 +342,7 @@ export class GameRoom {
 
     // Kênh Sói: chỉ Sói còn sống mới được chat hoặc đọc
     if (channel === 'werewolf') {
-      if (sender.role !== ROLES.WEREWOLF || !sender.isAlive) return;
+      if (!isWerewolfRole(sender.role) || !sender.isAlive) return;
     }
 
     // Kênh Hồn Ma: chỉ người chết mới được chat
@@ -368,7 +373,7 @@ export class GameRoom {
       if (channel === 'public') {
         p.socket.emit('chat:message', message);
       } else if (channel === 'werewolf') {
-        if (p.role === ROLES.WEREWOLF) {
+        if (isWerewolfRole(p.role)) {
           p.socket.emit('chat:message', message);
         }
       } else if (channel === 'dead') {

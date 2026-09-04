@@ -32,8 +32,9 @@ export default function NightActionPanel({
   const me = players.find((p) => p.id === myId);
 
   // 1. Ma Sói (Werewolf)
-  if (myRole === 'werewolf') {
-    const targets = alivePlayers.filter((p) => p.role !== 'werewolf');
+  const isWolf = ['werewolf', 'alpha_wolf', 'white_wolf', 'wolf_pup'].includes(myRole);
+  if (isWolf) {
+    const targets = alivePlayers.filter((p) => !['werewolf', 'alpha_wolf', 'white_wolf', 'wolf_pup'].includes(p.role));
     const handleWolfVote = () => {
       if (!selectedTarget) return;
       soundFx.playClick();

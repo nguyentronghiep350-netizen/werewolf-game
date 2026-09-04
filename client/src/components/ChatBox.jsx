@@ -13,7 +13,7 @@ export default function ChatBox({
   const [activeTab, setActiveTab] = useState('public');
   const messagesEndRef = useRef(null);
 
-  const isWolf = myRole === 'werewolf';
+  const isWolf = ['werewolf', 'alpha_wolf', 'white_wolf', 'wolf_pup'].includes(myRole);
   const isNight = phase?.startsWith('NIGHT');
 
   // Tự động chuyển tab sang Sói vào ban đêm nếu là Sói
