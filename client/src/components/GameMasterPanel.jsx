@@ -261,7 +261,7 @@ export default function GameMasterPanel({
 
             {/* Night Step Advance Control (Dành riêng cho ban đêm) */}
             {gameState.phase?.startsWith('NIGHT') && (
-              <div className="p-3 rounded-2xl bg-amber-950/50 border border-amber-500/50 space-y-2 shadow-lg">
+              <div className="p-3 rounded-2xl bg-amber-950/50 border border-amber-500/50 space-y-2.5 shadow-lg">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-amber-300 font-bold flex items-center gap-1">
                     <Moon className="w-3.5 h-3.5 text-amber-400" />
@@ -270,6 +270,40 @@ export default function GameMasterPanel({
                   <span className="font-bold text-white bg-black/50 px-2.5 py-0.5 rounded-lg border border-amber-500/40">
                     {gameState.activeNightTitle || 'Màn Đêm'}
                   </span>
+                </div>
+
+                {/* Live Intel Grid */}
+                <div className="p-2 bg-black/60 rounded-xl border border-amber-500/30 space-y-1.5 text-[11px]">
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                    👁️ Diễn Biến Đêm (Live God View):
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div className={`p-1.5 rounded-lg border ${gameState.godNightActions?.werewolfTargetId ? 'bg-rose-950/80 border-rose-600 text-rose-200' : 'bg-slate-900/60 border-slate-800 text-slate-400'}`}>
+                      <span className="font-bold text-rose-400 block text-[9px]">🐺 SÓI ĐANG CẮN:</span>
+                      <span className="font-black text-white truncate block text-[11px]">
+                        {gameState.godNightActions?.werewolfTargetName ? `💀 ${gameState.godNightActions.werewolfTargetName}` : 'Đang chờ Sói vote...'}
+                      </span>
+                    </div>
+                    <div className={`p-1.5 rounded-lg border ${gameState.godNightActions?.bodyguardTargetId ? 'bg-cyan-950/80 border-cyan-600 text-cyan-200' : 'bg-slate-900/60 border-slate-800 text-slate-400'}`}>
+                      <span className="font-bold text-cyan-400 block text-[9px]">🛡️ BẢO VỆ GIỮ:</span>
+                      <span className="font-black text-white truncate block text-[11px]">
+                        {gameState.godNightActions?.bodyguardTargetName ? `✨ ${gameState.godNightActions.bodyguardTargetName}` : 'Chưa chọn'}
+                      </span>
+                    </div>
+                    <div className={`p-1.5 rounded-lg border ${gameState.godNightActions?.seerTargetId ? 'bg-purple-950/80 border-purple-600 text-purple-200' : 'bg-slate-900/60 border-slate-800 text-slate-400'}`}>
+                      <span className="font-bold text-purple-400 block text-[9px]">🔮 TIÊN TRI SOI:</span>
+                      <span className="font-black text-white truncate block text-[11px]">
+                        {gameState.godNightActions?.seerTargetName ? `${gameState.godNightActions.seerTargetName} (${gameState.godNightActions.seerResult?.isWerewolf ? 'SÓI 🐺' : 'DÂN 👤'})` : 'Chưa soi'}
+                      </span>
+                    </div>
+                    <div className={`p-1.5 rounded-lg border ${(gameState.godNightActions?.witchSave || gameState.godNightActions?.witchKillTargetId) ? 'bg-emerald-950/80 border-emerald-600 text-emerald-200' : 'bg-slate-900/60 border-slate-800 text-slate-400'}`}>
+                      <span className="font-bold text-emerald-400 block text-[9px]">🧪 PHÙ THỦY:</span>
+                      <span className="font-black text-white truncate block text-[11px]">
+                        {gameState.godNightActions?.witchSave ? 'Cứu: ✅ ' : ''}
+                        {gameState.godNightActions?.witchKillTargetName ? `Độc: ☠️ ${gameState.godNightActions.witchKillTargetName}` : (!gameState.godNightActions?.witchSave ? 'Chưa hành động' : '')}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 {nightDone && (

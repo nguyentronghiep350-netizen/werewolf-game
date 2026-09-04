@@ -50,6 +50,7 @@ export default function GameScreen({
     moderatorScript = [],
     currentScriptStep = 0,
     isGodModerator,
+    godNightActions,
     nightActionsDone,
   } = gameState || {};
 
@@ -327,6 +328,43 @@ export default function GameScreen({
               </p>
             </div>
 
+            {/* BẢNG TÌNH HÌNH HÀNH ĐỘNG ĐÊM THỰC TẾ (LIVE INTEL FOR GOD MODERATOR) */}
+            {isNight && (
+              <div className="p-3 bg-black/60 border border-amber-500/30 rounded-2xl space-y-2">
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-amber-400" />
+                  Diễn Biến Kỹ Năng Đêm Hiện Tại:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className={`p-2 rounded-xl border transition ${godNightActions?.werewolfTargetId ? 'bg-rose-950/80 border-rose-500 shadow-md shadow-rose-950' : 'bg-slate-900/70 border-slate-800'}`}>
+                    <span className="font-bold block text-[10px] uppercase tracking-wider text-rose-400">🐺 SÓI ĐANG CẮN:</span>
+                    <span className="font-black text-xs text-white truncate block mt-0.5">
+                      {godNightActions?.werewolfTargetName ? `💀 ${godNightActions.werewolfTargetName}` : 'Đang chờ Sói vote...'}
+                    </span>
+                  </div>
+                  <div className={`p-2 rounded-xl border transition ${godNightActions?.bodyguardTargetId ? 'bg-cyan-950/80 border-cyan-500 shadow-md shadow-cyan-950' : 'bg-slate-900/70 border-slate-800'}`}>
+                    <span className="font-bold block text-[10px] uppercase tracking-wider text-cyan-400">🛡️ BẢO VỆ GIỮ:</span>
+                    <span className="font-black text-xs text-white truncate block mt-0.5">
+                      {godNightActions?.bodyguardTargetName ? `✨ ${godNightActions.bodyguardTargetName}` : 'Chưa chọn'}
+                    </span>
+                  </div>
+                  <div className={`p-2 rounded-xl border transition ${godNightActions?.seerTargetId ? 'bg-purple-950/80 border-purple-500 shadow-md shadow-purple-950' : 'bg-slate-900/70 border-slate-800'}`}>
+                    <span className="font-bold block text-[10px] uppercase tracking-wider text-purple-400">🔮 TIÊN TRI SOI:</span>
+                    <span className="font-black text-xs text-white truncate block mt-0.5">
+                      {godNightActions?.seerTargetName ? `${godNightActions.seerTargetName} (${godNightActions.seerResult?.isWerewolf ? 'SÓI 🐺' : 'DÂN 👤'})` : 'Chưa soi'}
+                    </span>
+                  </div>
+                  <div className={`p-2 rounded-xl border transition ${(godNightActions?.witchSave || godNightActions?.witchKillTargetId) ? 'bg-emerald-950/80 border-emerald-500 shadow-md shadow-emerald-950' : 'bg-slate-900/70 border-slate-800'}`}>
+                    <span className="font-bold block text-[10px] uppercase tracking-wider text-emerald-400">🧪 PHÙ THỦY:</span>
+                    <span className="font-black text-xs text-white truncate block mt-0.5">
+                      {godNightActions?.witchSave ? 'Cứu: ✅ ' : ''}
+                      {godNightActions?.witchKillTargetName ? `Độc: ☠️ ${godNightActions.witchKillTargetName}` : (!godNightActions?.witchSave ? 'Chưa hành động' : '')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Nút Hành Động Chuyển Lượt / Chuyển Pha */}
             <div className="flex flex-col sm:flex-row items-center gap-2">
               {isNight ? (
@@ -422,6 +460,11 @@ export default function GameScreen({
               const isProtected = isAlive && myRole === 'bodyguard' && me?.lastProtectedId === p.id;
               const isMyLover = p.isLover;
 
+              const isWolfTarget = isModeratorUser && isNight && godNightActions?.werewolfTargetId === p.id;
+              const isGuardTarget = isModeratorUser && isNight && godNightActions?.bodyguardTargetId === p.id;
+              const isSeerTarget = isModeratorUser && isNight && godNightActions?.seerTargetId === p.id;
+              const isWitchKillTarget = isModeratorUser && isNight && godNightActions?.witchKillTargetId === p.id;
+
               const voice = voiceStates[p.id];
               const isSpeaking = voice?.isSpeaking;
               const inVoice = voice?.inVoice;
@@ -433,6 +476,10 @@ export default function GameScreen({
                   className={`p-2 rounded-2xl border transition-all duration-200 relative flex flex-col items-center text-center ${
                     isSpeaking
                       ? 'ring-2 ring-emerald-400 bg-emerald-950/40 border-emerald-500 shadow-lg shadow-emerald-950/60 scale-102'
+                      : isWolfTarget
+                      ? 'ring-2 ring-rose-500 bg-rose-950/60 border-rose-500 shadow-lg shadow-rose-950/80 animate-pulse'
+                      : isGuardTarget
+                      ? 'ring-2 ring-cyan-400 bg-cyan-950/50 border-cyan-400 shadow-md shadow-cyan-950'
                       : !p.isAlive
                       ? 'bg-slate-950/60 border-slate-800 opacity-50 grayscale'
                       : isMe
@@ -485,6 +532,28 @@ export default function GameScreen({
                   <span className="font-bold text-white text-xs truncate max-w-full">
                     {p.name}
                   </span>
+
+                  {/* Badges hành động ban đêm cho Quản trò */}
+                  {isWolfTarget && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-600 text-white font-black tracking-tight mt-0.5 animate-bounce">
+                      🐺 SÓI ĐANG CẮN
+                    </span>
+                  )}
+                  {isGuardTarget && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-cyan-600 text-white font-black tracking-tight mt-0.5">
+                      🛡️ ĐƯỢC BẢO VỆ
+                    </span>
+                  )}
+                  {isSeerTarget && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-600 text-white font-black tracking-tight mt-0.5">
+                      🔮 TIÊN TRI SOI
+                    </span>
+                  )}
+                  {isWitchKillTarget && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-black tracking-tight mt-0.5">
+                      🧪 PHÙ THỦY ĐỘC
+                    </span>
+                  )}
 
                   {/* Hiển thị vai trò nếu đã chết, được reveal, hoặc bản thân là Quản Trò */}
                   {p.role === 'moderator' ? (

@@ -368,8 +368,9 @@ export class GameState {
           partnerRole: p1.role,
         });
 
-        this.addLog('night', `Thần Tình Yêu đã bắn mũi tên kết đôi 2 tâm hồn!`, { secret: true });
+        this.addLog('night', `💘 Thần Tình Yêu đã se duyên kết đôi: ${p1.name} & ${p2.name}!`, { secret: true });
         this.checkAllNightActionsComplete();
+        this.room.broadcastState();
         return true;
       }
     }
@@ -380,7 +381,9 @@ export class GameState {
       if (target && target.isAlive && target.id !== player.lastProtectedId) {
         this.nightActions.bodyguardTarget = target.id;
         player.lastProtectedId = target.id;
+        this.addLog('night', `🛡️ Bảo Vệ đã chọn che chở cho: ${target.name}`, { secret: true });
         this.checkAllNightActionsComplete();
+        this.room.broadcastState();
         return true;
       }
     }
@@ -398,9 +401,13 @@ export class GameState {
           });
         });
 
+        const currentVictim = this.getPlayer(this.getWerewolfTarget());
+        this.addLog('night', `🐺 Sói ${player.name} vote cắn ${target.name} (Mục tiêu sói hiện tại: ${currentVictim ? currentVictim.name : target.name})`, { secret: true });
+
         // Cập nhật cho phù thủy biết ai đang bị cắn nhiều nhất
         this.notifyWitchCurrentVictim();
         this.checkAllNightActionsComplete();
+        this.room.broadcastState();
         return true;
       }
     }
@@ -422,7 +429,9 @@ export class GameState {
         this.nightActions.seerResult = result;
 
         this.room.sendToPlayer(player.id, 'seer:inspection_result', result);
+        this.addLog('night', `🔮 Tiên Tri đã soi ${target.name} -> Kết quả: ${result.isWerewolf ? 'MA SÓI 🐺' : 'Phe Dân Làng 👤'}`, { secret: true });
         this.checkAllNightActionsComplete();
+        this.room.broadcastState();
         return true;
       }
     }
@@ -432,21 +441,26 @@ export class GameState {
       if (save && !player.witchSaveUsed) {
         this.nightActions.witchSave = true;
         player.witchSaveUsed = true;
+        this.addLog('night', `🧪 Phù Thủy đã dùng bình CỨU sống nạn nhân của Sói!`, { secret: true });
       }
       if (killTargetId && !player.witchKillUsed) {
         const killTarget = this.getPlayer(killTargetId);
         if (killTarget && killTarget.isAlive) {
           this.nightActions.witchKillTarget = killTarget.id;
           player.witchKillUsed = true;
+          this.addLog('night', `🧪 Phù Thủy đã ném bình ĐỘC tiêu diệt: ${killTarget.name}`, { secret: true });
         }
       }
       this.checkAllNightActionsComplete();
+      this.room.broadcastState();
       return true;
     }
 
     // 6. Phù Thủy chọn xong / bỏ qua
     if (player.role === ROLES.WITCH && action === 'witch_pass') {
+      this.addLog('night', `🧪 Phù Thủy quyết định giữ bình thuốc, không sử dụng đêm nay.`, { secret: true });
       this.checkAllNightActionsComplete();
+      this.room.broadcastState();
       return true;
     }
 
@@ -1036,6 +1050,23 @@ export class GameState {
       currentScriptStep: this.currentScriptStep || 0,
       aiTip,
       isGodModerator: !!isGodModerator,
+      godNightActions: isGodModerator ? {
+        werewolfTargetId: this.getWerewolfTarget(),
+        werewolfTargetName: this.getPlayer(this.getWerewolfTarget())?.name || null,
+        werewolfVotes: this.nightActions.werewolfVotes || {},
+        bodyguardTargetId: this.nightActions.bodyguardTarget || null,
+        bodyguardTargetName: this.getPlayer(this.nightActions.bodyguardTarget)?.name || null,
+        seerTargetId: this.nightActions.seerTarget || null,
+        seerTargetName: this.getPlayer(this.nightActions.seerTarget)?.name || null,
+        seerResult: this.nightActions.seerResult || null,
+        witchSave: !!this.nightActions.witchSave,
+        witchKillTargetId: this.nightActions.witchKillTarget || null,
+        witchKillTargetName: this.getPlayer(this.nightActions.witchKillTarget)?.name || null,
+        cupidTarget1Id: this.nightActions.cupidTarget1 || null,
+        cupidTarget1Name: this.getPlayer(this.nightActions.cupidTarget1)?.name || null,
+        cupidTarget2Id: this.nightActions.cupidTarget2 || null,
+        cupidTarget2Name: this.getPlayer(this.nightActions.cupidTarget2)?.name || null,
+      } : null,
       // Dữ liệu từng lượt gọi ban đêm tuần tự
       activeNightStep: this.activeNightStep || null,
       activeNightRole: this.activeNightRole || null,
