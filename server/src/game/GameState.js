@@ -51,16 +51,17 @@ export class GameState {
     // Danh sách người chết đêm qua để hiển thị ở Morning
     this.nightDeaths = [];
 
-    // Trạng thái từng lượt gọi vai trò ban đêm (Sequential Night Turns)
-    this.nightQueue = [];
     this.currentNightStepIndex = -1;
+    this.nightQueue = [];
     this.activeNightStep = null;
     this.activeNightRole = null;
     this.activeNightTitle = null;
     this.activeNightPrompt = null;
+    this.isTimerPaused = false;
+    this.moderatorControlMode = 'auto'; // 'auto' | 'manual'
   }
 
-  addLog(type, message, details = {}) {
+  addLog(type, message, details = null) {
     const logEntry = {
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
       time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -69,24 +70,45 @@ export class GameState {
       details,
     };
     this.logs.push(logEntry);
-    this.room.broadcast('game:log', logEntry);
+    this.room.broadcastLog(logEntry);
   }
 
   startTimer(seconds, onTick, onComplete) {
     this.clearTimer();
     this.timer = seconds;
-    this.room.broadcast('game:timer', { timer: this.timer });
+    this.isTimerPaused = false;
+    this.room.broadcast('game:timer', { timer: this.timer, isPaused: false });
 
     this.timerInterval = setInterval(() => {
+      if (this.isTimerPaused) {
+        return; // Đang tạm dừng đồng hồ, giữ nguyên giây
+      }
       this.timer--;
       if (onTick) onTick(this.timer);
-      this.room.broadcast('game:timer', { timer: this.timer });
+      this.room.broadcast('game:timer', { timer: this.timer, isPaused: this.isTimerPaused });
 
       if (this.timer <= 0) {
         this.clearTimer();
         if (onComplete) onComplete();
       }
     }, 1000);
+  }
+
+  toggleTimerPause() {
+    this.isTimerPaused = !this.isTimerPaused;
+    this.addLog('system', this.isTimerPaused ? '⏸️ Quản Trò đã tạm dừng đếm ngược thời gian.' : '▶️ Quản Trò đã tiếp tục đếm ngược thời gian.');
+    this.room.broadcast('game:timer', { timer: this.timer, isPaused: this.isTimerPaused });
+    this.room.broadcastState();
+    return this.isTimerPaused;
+  }
+
+  toggleControlMode() {
+    this.moderatorControlMode = this.moderatorControlMode === 'auto' ? 'manual' : 'auto';
+    this.addLog('system', this.moderatorControlMode === 'manual' 
+      ? '👤 Đã kích hoạt Chế độ Quản Trò Thủ Công (Chuyển bước theo lệnh Quản Trò).' 
+      : '⏱️ Đã kích hoạt Chế độ Quản Trò Tự Động (Chuyển bước theo đồng hồ đếm ngược).');
+    this.room.broadcastState();
+    return this.moderatorControlMode;
   }
 
   clearTimer() {
@@ -295,8 +317,18 @@ export class GameState {
     this.room.triggerBotNightActionForRole(step.role);
 
     // Bắt đầu đếm ngược cho bước này
-    const duration = step.duration || 15;
+    const hasHumanMod = this.room.players.some((p) => p.role === ROLES.MODERATOR && !p.isBot);
+    const duration = this.moderatorControlMode === 'manual' 
+      ? 120 
+      : (hasHumanMod ? 25 : (step.duration || 15));
+
     this.startTimer(duration, null, () => {
+      // Nếu ở chế độ thủ công, không tự động chuyển mà đợi Quản Trò
+      if (this.moderatorControlMode === 'manual') {
+        this.addLog('system', `⏳ Hết thời gian dự kiến cho [${step.title}]. Quản Trò hãy bấm "Chuyển Sang Lượt Tiếp" khi sẵn sàng.`);
+        this.room.broadcastState();
+        return;
+      }
       this.advanceNightStep();
     });
   }
@@ -378,7 +410,7 @@ export class GameState {
       const target = this.getPlayer(targetId);
       if (target && target.isAlive && target.id !== player.id) {
         this.nightActions.seerTarget = target.id;
-        const targetRoleDef = ROLE_DEFINITIONS[target.role];
+        const targetRoleDef = ROLE_DEFINITIONS[target.role] || { name: target.role, team: 'village' };
         const result = {
           targetId: target.id,
           targetName: target.name,
@@ -450,13 +482,44 @@ export class GameState {
     }
   }
 
+  // Kiểm tra xem vai trò hiện tại ban đêm đã chọn xong mục tiêu chưa
+  isCurrentNightActionDone() {
+    if (!this.activeNightStep) return false;
+    if (this.activeNightStep === 'cupid') {
+      return !!(this.nightActions.cupidTarget1 && this.nightActions.cupidTarget2);
+    }
+    if (this.activeNightStep === 'bodyguard') {
+      return !!this.nightActions.bodyguardTarget;
+    }
+    if (this.activeNightStep === 'werewolf') {
+      const aliveWolves = this.getAliveWerewolves();
+      return aliveWolves.length > 0 && Object.keys(this.nightActions.werewolfVotes).length >= aliveWolves.length;
+    }
+    if (this.activeNightStep === 'seer') {
+      return !!this.nightActions.seerTarget;
+    }
+    if (this.activeNightStep === 'witch') {
+      return !!(this.nightActions.witchSave || this.nightActions.witchKillTarget);
+    }
+    return false;
+  }
+
   // Tự động kiểm tra xem vai trò hiện tại đã hoàn thành chưa để rút ngắn chuyển bước sớm
   checkAllNightActionsComplete() {
+    const hasHumanMod = this.room.players.some((p) => p.role === ROLES.MODERATOR && !p.isBot);
+    // Nếu ở chế độ thủ công, không tự ép giảm giờ mà giữ nguyên cho Quản Trò đọc
+    if (this.moderatorControlMode === 'manual') {
+      this.room.broadcastState();
+      return;
+    }
+
+    const minReadingTime = hasHumanMod ? 8 : 2;
+
     // Nếu đang ở lượt Cupid
     if (this.activeNightStep === 'cupid') {
       const aliveCupid = this.room.players.find((p) => p.isAlive && p.role === ROLES.CUPID);
       if (aliveCupid && this.nightActions.cupidTarget1 && this.nightActions.cupidTarget2) {
-        if (this.timer > 2) this.timer = 2;
+        if (this.timer > minReadingTime) this.timer = minReadingTime;
       }
       return;
     }
@@ -465,7 +528,7 @@ export class GameState {
     if (this.activeNightStep === 'bodyguard') {
       const aliveBodyguard = this.room.players.find((p) => p.isAlive && p.role === ROLES.BODYGUARD);
       if (aliveBodyguard && this.nightActions.bodyguardTarget) {
-        if (this.timer > 2) this.timer = 2;
+        if (this.timer > minReadingTime) this.timer = minReadingTime;
       }
       return;
     }
@@ -940,7 +1003,7 @@ export class GameState {
   getPublicState(forPlayerId = null) {
     const requestingPlayer = forPlayerId ? this.getPlayer(forPlayerId) : null;
     const isWolf = requestingPlayer && isWerewolfRole(requestingPlayer.role);
-    const isGodModerator = this.room.config.moderatorMode === 'human' && requestingPlayer && requestingPlayer.isHost;
+    const isGodModerator = requestingPlayer && (requestingPlayer.role === ROLES.MODERATOR || requestingPlayer.isHost);
 
     // Sinh kịch bản gọi ban đêm dựa trên các lá bài thực tế có trong phòng
     const rolesPresent = this.room.players.map((p) => p.role).filter(Boolean);
@@ -954,10 +1017,17 @@ export class GameState {
       nightNumber: this.nightNumber,
       dayNumber: this.dayNumber,
       timer: this.timer,
+      isTimerPaused: !!this.isTimerPaused,
+      moderatorControlMode: this.moderatorControlMode || 'auto',
       winner: this.winner,
       winReason: this.winReason,
-      logs: this.logs,
-      nightDeaths: this.nightDeaths,
+      logs: (isGodModerator || this.phase === PHASES.GAME_OVER) ? this.logs : this.logs.filter((l) => !l.details?.secret),
+      nightDeaths: (isGodModerator || this.phase === PHASES.GAME_OVER)
+        ? this.nightDeaths
+        : this.nightDeaths.map((d) => ({
+            ...d,
+            reason: d.reason && d.reason.includes('Tự sát') ? 'Tự sát vì người yêu qua đời' : 'Bị sát hại trong đêm',
+          })),
       hunterPending: this.hunterPending ? this.getPlayer(this.hunterPending)?.name : null,
       dayVotes: this.phase === PHASES.DAY_VOTING || this.phase === PHASES.DAY_EXECUTION ? this.dayVotes : {},
       discussionSkips: Array.from(this.discussionSkipVotes),
@@ -973,6 +1043,7 @@ export class GameState {
       activeNightPrompt: this.activeNightPrompt || null,
       currentNightStepIndex: this.currentNightStepIndex >= 0 ? this.currentNightStepIndex : 0,
       totalNightSteps: this.nightQueue ? this.nightQueue.length : 0,
+      nightActionsDone: this.isCurrentNightActionDone(),
       players: this.room.players.map((p) => {
         // Chỉ hiện vai trò nếu game over, hoặc là Quản trò người thật (God mode), hoặc là chính mình, hoặc là sói nhìn thấy đồng bọn
         const showRole =
@@ -983,6 +1054,13 @@ export class GameState {
           (!p.isAlive && this.phase !== PHASES.NIGHT_ACTION) ||
           (isWolf && isWerewolfRole(p.role));
 
+        let sanitizedDeathReason = p.deathReason;
+        if (!isGodModerator && this.phase !== PHASES.GAME_OVER && p.deathReason) {
+          if (p.deathReason.includes('Ma Sói') || p.deathReason.includes('Phù Thủy') || p.deathReason.includes('đầu độc')) {
+            sanitizedDeathReason = 'Bị sát hại trong đêm';
+          }
+        }
+
         return {
           id: p.id,
           name: p.name,
@@ -991,7 +1069,7 @@ export class GameState {
           isReady: p.isReady,
           isBot: p.isBot,
           isAlive: p.isAlive,
-          deathReason: p.deathReason,
+          deathReason: sanitizedDeathReason,
           deathNight: p.deathNight,
           role: showRole ? p.role : null,
           roleDetails: showRole ? ROLE_DEFINITIONS[p.role] : null,

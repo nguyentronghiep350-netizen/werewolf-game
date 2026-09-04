@@ -136,7 +136,11 @@ console.log(`✓ Bước 6: Rạng sáng (Morning), công bố kết quả đêm
 // Kiểm tra kết quả đêm: Nạn nhân pVillager được Phù Thủy cứu sống
 assert.strictEqual(pVillager.isAlive, true, 'pVillager được Phù Thủy cứu nên phải còn sống');
 assert.strictEqual(gs.nightDeaths.length, 0, 'Không ai chết đêm qua vì đã được cứu');
-console.log('✓ Test 2 đạt: Vòng lặp các vai trò ban đêm tuần tự và cứu sống thành công 100%!');
+
+// Kiểm tra tính bảo mật: Người chơi bình thường không được thấy log bí mật của Phù Thủy/Bảo Vệ
+const villagerState = gs.getPublicState(pVillager.id);
+assert(villagerState.logs.every(l => !l.details?.secret), 'Dân làng không được thấy log bí mật của Phù thủy/Bảo vệ');
+console.log('✓ Test 2 đạt: Vòng lặp các vai trò ban đêm tuần tự, cứu sống và bảo mật hành động Phù Thủy thành công 100%!');
 
 console.log('[Test 3] Kiểm tra Quản Trò Người Thật bấm chuyển bước thủ công (advance_night_step)...');
 gs.nightNumber = 0;

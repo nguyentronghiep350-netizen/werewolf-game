@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Crown, Bot, ChevronRight, ChevronLeft, Volume2, Skull, Heart, Shield, Sparkles, Moon, Sun, Gavel, Eye, X, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Crown, Bot, ChevronRight, ChevronLeft, Volume2, VolumeX, Skull, Heart, Shield, Sparkles, Moon, Sun, Gavel, Eye, X, Check, Pause, Play, UserCheck, ToggleLeft, ToggleRight, Radio } from 'lucide-react';
 import { soundFx } from '../utils/audio';
 
 export default function GameMasterPanel({
@@ -10,6 +10,7 @@ export default function GameMasterPanel({
 }) {
   const [minimized, setMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState('script'); // 'script' | 'god_roster'
+  const [isSpeakingTTS, setIsSpeakingTTS] = useState(false);
 
   if (!isHost || !gameState) return null;
 
@@ -17,6 +18,51 @@ export default function GameMasterPanel({
   const currentStepIndex = gameState.currentScriptStep || 0;
   const currentStep = script[currentStepIndex] || script[0];
   const players = gameState.players || [];
+  const isTimerPaused = !!gameState.isTimerPaused;
+  const controlMode = gameState.moderatorControlMode || 'auto'; // 'auto' | 'manual'
+  const nightDone = !!gameState.nightActionsDone;
+
+  // Dừng phát âm thanh TTS khi component unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Đọc lời thoại tự động bằng Web Speech API (Giọng tiếng Việt)
+  const handleSpeakTTS = (text) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      alert('Trình duyệt của bạn không hỗ trợ đọc giọng nói tự động!');
+      return;
+    }
+
+    if (isSpeakingTTS) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingTTS(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'vi-VN';
+    utterance.rate = 0.95; // Tốc độ vừa phải, truyền cảm
+    utterance.pitch = 1.0;
+
+    // Tìm giọng tiếng Việt nếu có
+    const voices = window.speechSynthesis.getVoices();
+    const viVoice = voices.find((v) => v.lang.includes('vi') || v.lang.includes('VI'));
+    if (viVoice) {
+      utterance.voice = viVoice;
+    }
+
+    utterance.onstart = () => setIsSpeakingTTS(true);
+    utterance.onend = () => setIsSpeakingTTS(false);
+    utterance.onerror = () => setIsSpeakingTTS(false);
+
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleNextStep = () => {
     soundFx.playClick();
@@ -45,6 +91,21 @@ export default function GameMasterPanel({
     onModeratorAction('revive', { targetId });
   };
 
+  const handleTogglePauseTimer = () => {
+    soundFx.playClick();
+    onModeratorAction('toggle_pause_timer');
+  };
+
+  const handleToggleControlMode = () => {
+    soundFx.playClick();
+    onModeratorAction('toggle_control_mode');
+  };
+
+  const handleAdvanceNightStep = () => {
+    soundFx.playClick();
+    onModeratorAction('advance_night_step');
+  };
+
   if (minimized) {
     return (
       <div className="fixed top-20 right-4 z-40 animate-fadeIn">
@@ -53,14 +114,14 @@ export default function GameMasterPanel({
           className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold text-xs shadow-xl shadow-orange-950/60 flex items-center gap-2 cursor-pointer border border-amber-400/50 hover:scale-105 transition"
         >
           <Crown className="w-4 h-4 text-amber-200 animate-pulse" />
-          <span>Mở Bảng Quản Trò & Kịch Bản AI</span>
+          <span>Mở Bảng Quản Trò Toàn Năng</span>
         </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed top-20 right-4 z-40 w-full max-w-md bg-slate-900/95 border-2 border-amber-500/70 rounded-3xl shadow-2xl backdrop-blur-2xl overflow-hidden flex flex-col max-h-[85vh] animate-fadeIn">
+    <div className="fixed top-20 right-4 z-40 w-full max-w-md bg-slate-900/95 border-2 border-amber-500/70 rounded-3xl shadow-2xl backdrop-blur-2xl overflow-hidden flex flex-col max-h-[88vh] animate-fadeIn">
       {/* Panel Header */}
       <div className="p-3.5 bg-gradient-to-r from-amber-950/90 to-slate-900 border-b border-amber-500/40 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -71,7 +132,7 @@ export default function GameMasterPanel({
             <h3 className="font-black text-amber-300 text-xs uppercase tracking-wider">
               BẢNG ĐIỀU PHỐI QUẢN TRÒ (GOD MODE)
             </h3>
-            <p className="text-[10px] text-slate-400">Kịch bản thoại AI & Toàn quyền điều khiển</p>
+            <p className="text-[10px] text-slate-400">Toàn quyền điều khiển ván đấu theo ý bạn</p>
           </div>
         </div>
 
@@ -86,6 +147,46 @@ export default function GameMasterPanel({
         </div>
       </div>
 
+      {/* Quick Master Bar: Pause Timer & Control Mode */}
+      <div className="bg-slate-950/80 px-3.5 py-2 border-b border-slate-800 flex items-center justify-between gap-2 text-xs">
+        {/* Nút Pause / Resume Timer */}
+        <button
+          onClick={handleTogglePauseTimer}
+          className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
+            isTimerPaused
+              ? 'bg-amber-600 text-slate-950 animate-pulse shadow-md shadow-amber-950/60'
+              : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+          }`}
+          title={isTimerPaused ? 'Bấm để tiếp tục chạy giờ' : 'Bấm để tạm dừng đồng hồ (để tha hồ đọc thoại)'}
+        >
+          {isTimerPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5" />}
+          <span>{isTimerPaused ? 'Tiếp Tục Giờ' : 'Tạm Dừng Giờ'}</span>
+        </button>
+
+        {/* Chế độ Thủ Công / Tự Động */}
+        <button
+          onClick={handleToggleControlMode}
+          className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition cursor-pointer text-xs ${
+            controlMode === 'manual'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'bg-slate-800 text-slate-400 border border-slate-700'
+          }`}
+          title="Chuyển chế độ Quản trò thủ công (không tự chuyển) hoặc Tự động (theo đồng hồ)"
+        >
+          {controlMode === 'manual' ? (
+            <>
+              <ToggleRight className="w-4 h-4 text-emerald-300" />
+              <span>Thủ Công (Bấm Next)</span>
+            </>
+          ) : (
+            <>
+              <ToggleLeft className="w-4 h-4 text-slate-400" />
+              <span>Tự Động (Theo Giờ)</span>
+            </>
+          )}
+        </button>
+      </div>
+
       {/* Tabs */}
       <div className="flex border-b border-slate-800 bg-slate-950/60 text-xs font-bold px-3 pt-2 gap-2">
         <button
@@ -97,7 +198,7 @@ export default function GameMasterPanel({
           }`}
         >
           <Bot className="w-3.5 h-3.5" />
-          <span>Kịch Bản AI Thoại</span>
+          <span>Kịch Bản Thoại AI</span>
         </button>
 
         <button
@@ -127,40 +228,63 @@ export default function GameMasterPanel({
             </div>
 
             {/* Prompt Box */}
-            <div className="p-3.5 bg-gradient-to-b from-indigo-950/60 to-slate-900 border border-indigo-500/40 rounded-2xl space-y-2 shadow-inner">
-              <div className="flex items-center gap-1.5 text-indigo-300 font-bold text-[11px] uppercase tracking-wider">
-                <Volume2 className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Lời Thoại AI Gợi Ý Đọc Cho Cả Làng Nghe:</span>
+            <div className="p-3.5 bg-gradient-to-b from-indigo-950/60 to-slate-900 border border-indigo-500/40 rounded-2xl space-y-2.5 shadow-inner">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-indigo-300 font-bold text-[11px] uppercase tracking-wider">
+                  <Volume2 className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Lời Thoại Dẫn Truyện:</span>
+                </div>
+
+                {/* Nút Đọc Giọng AI Tự Động (TTS) */}
+                <button
+                  type="button"
+                  onClick={() => handleSpeakTTS(currentStep.voicePrompt)}
+                  className={`px-2.5 py-1 rounded-lg font-bold text-[11px] flex items-center gap-1 transition cursor-pointer shadow ${
+                    isSpeakingTTS
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  }`}
+                  title="Máy tự đọc thoại tiếng Việt cho bạn nghe"
+                >
+                  {isSpeakingTTS ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  <span>{isSpeakingTTS ? 'Dừng Đọc' : '🔊 Đọc Hộ Tôi'}</span>
+                </button>
               </div>
-              <p className="text-white font-medium text-sm leading-relaxed italic bg-black/30 p-2.5 rounded-xl border border-white/10">
+
+              <p className="text-white font-medium text-sm leading-relaxed italic bg-black/40 p-3 rounded-xl border border-white/10 select-all">
                 "{currentStep.voicePrompt}"
               </p>
               <div className="text-[11px] text-amber-300/90 bg-amber-950/40 p-2 rounded-xl border border-amber-800/40">
-                💡 <strong>Mẹo Quản trò:</strong> {currentStep.guideForHost}
+                💡 <strong>Gợi ý Quản trò:</strong> {currentStep.guideForHost}
               </div>
             </div>
 
             {/* Night Step Advance Control (Dành riêng cho ban đêm) */}
             {gameState.phase?.startsWith('NIGHT') && (
-              <div className="p-2.5 rounded-2xl bg-amber-950/60 border border-amber-500/50 space-y-2 shadow-md">
+              <div className="p-3 rounded-2xl bg-amber-950/50 border border-amber-500/50 space-y-2 shadow-lg">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-amber-300 font-bold flex items-center gap-1">
                     <Moon className="w-3.5 h-3.5 text-amber-400" />
-                    Lượt Gọi Ban Đêm:
+                    Đang gọi:
                   </span>
-                  <span className="font-mono text-white bg-black/40 px-2 py-0.5 rounded-lg border border-amber-500/30">
-                    {gameState.activeNightTitle || 'Đêm Buông Xuống'}
+                  <span className="font-bold text-white bg-black/50 px-2.5 py-0.5 rounded-lg border border-amber-500/40">
+                    {gameState.activeNightTitle || 'Màn Đêm'}
                   </span>
                 </div>
+
+                {nightDone && (
+                  <div className="p-2 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-[11px] font-semibold flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Người chơi vai trò này đã thực hiện xong! Bạn có thể bấm Chuyển Lượt tiếp.</span>
+                  </div>
+                )}
+
                 <button
-                  onClick={() => {
-                    soundFx.playClick();
-                    onModeratorAction('advance_night_step');
-                  }}
-                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+                  onClick={handleAdvanceNightStep}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-orange-950/60 transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-98"
                 >
-                  <ChevronRight className="w-4 h-4" />
-                  <span>Chuyển Sang Vai Trò Tiếp Theo (Next Turn)</span>
+                  <ChevronRight className="w-4 h-4 stroke-[3]" />
+                  <span>CHUYỂN SANG VAI TRÒ TIẾP THEO (NEXT TURN)</span>
                 </button>
               </div>
             )}
@@ -286,3 +410,4 @@ export default function GameMasterPanel({
     </div>
   );
 }
+

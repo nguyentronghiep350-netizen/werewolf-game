@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Sun, Clock, Skull, Heart, Shield, Flame, Eye, Gavel, MessageSquare, ScrollText } from 'lucide-react';
+import { Moon, Sun, Clock, Skull, Heart, Shield, Flame, Eye, Gavel, MessageSquare, ScrollText, Volume2, VolumeX, Pause, Play, ChevronRight, ToggleLeft, ToggleRight, Sparkles, Crown } from 'lucide-react';
 import { soundFx } from '../utils/audio';
 import NightActionPanel from './NightActionPanel';
 import VotingPanel from './VotingPanel';
@@ -27,14 +27,18 @@ export default function GameScreen({
   witchVictim,
   loverPartner,
   voiceStates = {},
+  onModeratorAction,
 }) {
   const [activeBottomTab, setActiveBottomTab] = useState('chat'); // 'chat' | 'logs'
+  const [isSpeakingTTS, setIsSpeakingTTS] = useState(false);
 
   const {
     phase,
     nightNumber,
     dayNumber,
     timer,
+    isTimerPaused,
+    moderatorControlMode = 'auto',
     winner,
     winReason,
     logs = [],
@@ -43,6 +47,10 @@ export default function GameScreen({
     hunterPending,
     dayVotes = {},
     discussionSkips = [],
+    moderatorScript = [],
+    currentScriptStep = 0,
+    isGodModerator,
+    nightActionsDone,
   } = gameState || {};
 
   const me = players.find((p) => p.id === myId);
@@ -50,6 +58,16 @@ export default function GameScreen({
   const isNight = phase?.startsWith('NIGHT');
   const isHunterTurn = phase === 'HUNTER_ACTION';
   const isMyHunterTurn = isHunterTurn && hunterPending === me?.name;
+  const isModeratorUser = myRole === 'moderator' || (isHost && isGodModerator);
+
+  // Dừng phát TTS khi chuyển phase hoặc unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [phase]);
 
   // Kích hoạt âm thanh khi đổi phase
   useEffect(() => {
@@ -64,6 +82,38 @@ export default function GameScreen({
       soundFx.playDeathBell();
     }
   }, [phase]);
+
+  // Phát âm thanh giọng đọc tiếng Việt Web Speech API
+  const handleSpeakTTS = (text) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      alert('Trình duyệt của bạn không hỗ trợ phát giọng đọc tự động!');
+      return;
+    }
+
+    if (isSpeakingTTS) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingTTS(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'vi-VN';
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    const viVoice = voices.find((v) => v.lang.includes('vi') || v.lang.includes('VI'));
+    if (viVoice) {
+      utterance.voice = viVoice;
+    }
+
+    utterance.onstart = () => setIsSpeakingTTS(true);
+    utterance.onend = () => setIsSpeakingTTS(false);
+    utterance.onerror = () => setIsSpeakingTTS(false);
+
+    window.speechSynthesis.speak(utterance);
+  };
 
   // Thông tin tiêu đề phase
   const getPhaseInfo = () => {
@@ -132,6 +182,9 @@ export default function GameScreen({
   const aliveNonModCount = players.filter((p) => p.isAlive && p.role !== 'moderator').length;
   const totalNonModCount = players.filter((p) => p.role !== 'moderator').length;
 
+  // Lời thoại hiện tại của Quản Trò
+  const currentVoiceLine = gameState?.activeNightPrompt || (moderatorScript[currentScriptStep]?.voicePrompt) || phaseInfo.desc;
+
   return (
     <div className={`min-h-[calc(100vh-65px)] flex flex-col justify-between transition-colors duration-700 ${
       isNight ? 'bg-[#060813]' : 'bg-[#0a0e1a]'
@@ -154,9 +207,14 @@ export default function GameScreen({
                 <h2 className={`text-sm md:text-base font-black tracking-wider ${phaseInfo.color}`}>
                   {phaseInfo.title}
                 </h2>
-                {!isAlive && (
+                {!isAlive && myRole !== 'moderator' && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-800 font-semibold">
                     Đã Chết 👻
+                  </span>
+                )}
+                {isTimerPaused && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black uppercase tracking-wide animate-pulse">
+                    ⏸️ ĐANG TẠM DỪNG GIỜ
                   </span>
                 )}
               </div>
@@ -164,15 +222,155 @@ export default function GameScreen({
             </div>
           </div>
 
-          {timer > 0 && (
-            <div className="flex items-center gap-1.5 bg-slate-950/90 px-3.5 py-1.5 rounded-2xl border border-slate-800">
-              <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span className="text-lg md:text-xl font-black font-mono text-white">
-                {timer}s
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {timer > 0 && (
+              <div className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl border ${
+                isTimerPaused
+                  ? 'bg-amber-950 border-amber-500 text-amber-300'
+                  : 'bg-slate-950/90 border-slate-800 text-white'
+              }`}>
+                <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span className="text-lg md:text-xl font-black font-mono">
+                  {timer}s
+                </span>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* ========================================================================= */}
+        {/* BÀN ĐIỀU KHIỂN QUẢN TRÒ TRỰC TIẾP (GAME MASTER COMMAND DECK) */}
+        {/* ========================================================================= */}
+        {isModeratorUser && (
+          <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-950/90 via-slate-900 to-indigo-950/90 border-2 border-amber-500/70 shadow-2xl space-y-3 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/30 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl p-1 bg-amber-500 text-slate-950 rounded-xl">👑</span>
+                <div>
+                  <h3 className="font-black text-amber-300 text-xs md:text-sm uppercase tracking-wider">
+                    BÀN ĐIỀU KHIỂN QUẢN TRÒ (GOD DECK)
+                  </h3>
+                  <p className="text-[11px] text-slate-300">
+                    Bạn toàn quyền làm chủ nhịp độ trận đấu, không sợ bị trôi giờ!
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Nút Pause / Resume Timer */}
+                <button
+                  type="button"
+                  onClick={() => onModeratorAction && onModeratorAction('toggle_pause_timer')}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow ${
+                    isTimerPaused
+                      ? 'bg-amber-500 text-slate-950 animate-pulse font-black'
+                      : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+                  }`}
+                  title="Tạm dừng hoặc tiếp tục đồng hồ đếm ngược"
+                >
+                  {isTimerPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5" />}
+                  <span>{isTimerPaused ? 'Tiếp Tục Giờ' : 'Tạm Dừng Giờ'}</span>
+                </button>
+
+                {/* Chế độ Thủ Công / Tự Động */}
+                <button
+                  type="button"
+                  onClick={() => onModeratorAction && onModeratorAction('toggle_control_mode')}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow ${
+                    moderatorControlMode === 'manual'
+                      ? 'bg-indigo-600 text-white border border-indigo-400'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}
+                  title="Chuyển giữa chế độ Thủ công (chỉ chuyển khi Quản trò bấm Next) và Tự động (theo đồng hồ)"
+                >
+                  {moderatorControlMode === 'manual' ? (
+                    <>
+                      <ToggleRight className="w-4 h-4 text-emerald-300" />
+                      <span>Thủ Công (Bấm Next)</span>
+                    </>
+                  ) : (
+                    <>
+                      <ToggleLeft className="w-4 h-4 text-slate-400" />
+                      <span>Tự Động (Theo Giờ)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Khung Lời Thoại Cần Đọc Ngay */}
+            <div className="p-3 bg-black/40 border border-amber-500/40 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                  Lời Thoại Cần Đọc Lúc Này:
+                </span>
+
+                {/* Nút Đọc Giọng AI Web Speech API */}
+                <button
+                  type="button"
+                  onClick={() => handleSpeakTTS(currentVoiceLine)}
+                  className={`px-3 py-1 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition cursor-pointer shadow ${
+                    isSpeakingTTS
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black'
+                  }`}
+                  title="Máy tự đọc thoại tiếng Việt tự động cho làng nghe"
+                >
+                  {isSpeakingTTS ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                  <span>{isSpeakingTTS ? 'Dừng Đọc' : '🔊 Đọc Giọng AI Hộ Tôi'}</span>
+                </button>
+              </div>
+
+              <p className="text-white font-medium text-xs sm:text-sm leading-relaxed italic bg-slate-900/90 p-2.5 rounded-xl border border-slate-700 select-all">
+                "{currentVoiceLine}"
+              </p>
+            </div>
+
+            {/* Nút Hành Động Chuyển Lượt / Chuyển Pha */}
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              {isNight ? (
+                <button
+                  type="button"
+                  onClick={() => onModeratorAction && onModeratorAction('advance_night_step')}
+                  className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-orange-950/60 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98"
+                >
+                  <ChevronRight className="w-4 h-4 stroke-[3]" />
+                  <span>
+                    {nightActionsDone ? '✓ ĐÃ XONG KỸ NĂNG - BẤM CHUYỂN LƯỢT TIẾP' : 'CHUYỂN SANG VAI TRÒ TIẾP THEO (NEXT TURN)'}
+                  </span>
+                </button>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 w-full">
+                  <button
+                    type="button"
+                    onClick={() => onModeratorAction && onModeratorAction('set_phase', { phase: 'NIGHT_ACTION' })}
+                    className="py-2.5 px-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Sang Đêm 🌙</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onModeratorAction && onModeratorAction('set_phase', { phase: 'DAY_DISCUSSION' })}
+                    className="py-2.5 px-2 rounded-xl bg-amber-950 hover:bg-amber-900 border border-amber-700 text-amber-200 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Sun className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Thảo Luận ☀️</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onModeratorAction && onModeratorAction('set_phase', { phase: 'DAY_VOTING' })}
+                    className="py-2.5 px-2 rounded-xl bg-rose-950 hover:bg-rose-900 border border-rose-700 text-rose-200 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Gavel className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Bỏ Phiếu 🗳️</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Thông báo kết quả sáng (Morning Death announcement) */}
         {phase === 'MORNING' && (
@@ -288,7 +486,7 @@ export default function GameScreen({
                     {p.name}
                   </span>
 
-                  {/* Hiển thị vai trò nếu đã chết hoặc được reveal */}
+                  {/* Hiển thị vai trò nếu đã chết, được reveal, hoặc bản thân là Quản Trò */}
                   {p.role === 'moderator' ? (
                     <span className="text-[10px] font-bold text-amber-400 mt-0.5 truncate flex items-center justify-center gap-0.5">
                       👑 Quản Trò
@@ -306,6 +504,31 @@ export default function GameScreen({
                     </span>
                   )}
 
+                  {/* Quick God Actions dành cho Quản Trò trên từng ô người chơi */}
+                  {isModeratorUser && p.role !== 'moderator' && (
+                    <div className="flex items-center gap-1 mt-1">
+                      {p.isAlive ? (
+                        <button
+                          type="button"
+                          onClick={() => onModeratorAction && onModeratorAction('kill', { targetId: p.id })}
+                          className="px-1.5 py-0.5 rounded bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-[9px] font-bold cursor-pointer transition"
+                          title="Xử tử người này"
+                        >
+                          Xử tử 💀
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onModeratorAction && onModeratorAction('revive', { targetId: p.id })}
+                          className="px-1.5 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-[9px] font-bold cursor-pointer transition"
+                          title="Hồi sinh người này"
+                        >
+                          Hồi sinh ✨
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Hiển thị vote nếu có */}
                   {hasVote && (
                     <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-950 text-red-300 border border-red-800 mt-1 font-mono">
@@ -318,25 +541,7 @@ export default function GameScreen({
           </div>
         </div>
 
-        {/* Banner Quản Trò Toàn Năng nếu bản thân là Quản Trò */}
-        {myRole === 'moderator' && (
-          <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-500/50 shadow-lg flex items-center justify-between gap-3 text-xs animate-fadeIn">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">👑</span>
-              <div>
-                <p className="font-bold text-amber-300 uppercase tracking-wide">QUẢN TRÒ TOÀN NĂNG (GAME MASTER)</p>
-                <p className="text-slate-300 text-[11px]">
-                  Mở <strong>Bảng Quản Trò</strong> ở góc dưới để điều phối ván đấu!
-                </p>
-              </div>
-            </div>
-            <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-400 font-mono text-[10px] font-bold border border-amber-500/30 whitespace-nowrap">
-              Master Mode
-            </span>
-          </div>
-        )}
-
-        {/* Panel Hành Động Ban Đêm */}
+        {/* Panel Hành Động Ban Đêm (Chỉ hiện cho người chơi thường) */}
         {isNight && myRole !== 'moderator' && (
           <NightActionPanel
             myRole={myRole}
@@ -444,3 +649,4 @@ export default function GameScreen({
     </div>
   );
 }
+

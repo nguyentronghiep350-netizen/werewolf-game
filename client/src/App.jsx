@@ -248,6 +248,7 @@ export default function App() {
             witchVictim={witchVictim}
             loverPartner={loverPartner}
             voiceStates={voiceChat.voiceStates}
+            onModeratorAction={handleModeratorAction}
           />
         )}
       </main>

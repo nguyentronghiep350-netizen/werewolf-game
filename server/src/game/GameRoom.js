@@ -331,6 +331,10 @@ export class GameRoom {
       this.gameState.startNightStep(stepIndex);
     } else if (action === 'advance_script') {
       this.gameState.currentScriptStep = stepIndex ?? (this.gameState.currentScriptStep + 1);
+    } else if (action === 'toggle_pause_timer') {
+      this.gameState.toggleTimerPause();
+    } else if (action === 'toggle_control_mode') {
+      this.gameState.toggleControlMode();
     }
 
     this.broadcastState();
@@ -414,6 +418,19 @@ export class GameRoom {
     for (const p of this.players) {
       if (p.socket) {
         p.socket.emit(event, data);
+      }
+    }
+  }
+
+  // Gửi log sự kiện (bảo mật các log nhạy cảm / bí mật của đêm)
+  broadcastLog(logEntry) {
+    for (const p of this.players) {
+      if (p.socket) {
+        const isGodModerator = p.role === ROLES.MODERATOR || (p.isHost && this.players.some((x) => x.role === ROLES.MODERATOR && x.id === p.id));
+        if (logEntry.details?.secret && !isGodModerator && this.gameState?.phase !== PHASES.GAME_OVER) {
+          continue;
+        }
+        p.socket.emit('game:log', logEntry);
       }
     }
   }
