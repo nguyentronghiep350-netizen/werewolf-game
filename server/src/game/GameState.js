@@ -817,6 +817,13 @@ export class GameState {
     if (this.phase !== PHASES.DAY_DISCUSSION || !player.isAlive) return;
 
     this.discussionSkipVotes.add(player.id);
+
+    // Nếu người chơi thật bấm skip, các bot còn sống sẽ tự động đồng thuận để người chơi không phải chờ đợi lâu
+    if (!player.isBot) {
+      const aliveBots = this.getAlivePlayers().filter((p) => p.isBot);
+      aliveBots.forEach((b) => this.discussionSkipVotes.add(b.id));
+    }
+
     const aliveCount = this.getAlivePlayers().length;
 
     this.room.broadcast('game:skip_update', {
@@ -1017,7 +1024,10 @@ export class GameState {
   getPublicState(forPlayerId = null) {
     const requestingPlayer = forPlayerId ? this.getPlayer(forPlayerId) : null;
     const isWolf = requestingPlayer && isWerewolfRole(requestingPlayer.role);
-    const isGodModerator = requestingPlayer && (requestingPlayer.role === ROLES.MODERATOR || requestingPlayer.isHost);
+    const isGodModerator = requestingPlayer && (
+      requestingPlayer.role === ROLES.MODERATOR ||
+      (this.room.config.moderatorMode === 'human' && requestingPlayer.isHost)
+    );
 
     // Sinh kịch bản gọi ban đêm dựa trên các lá bài thực tế có trong phòng
     const rolesPresent = this.room.players.map((p) => p.role).filter(Boolean);

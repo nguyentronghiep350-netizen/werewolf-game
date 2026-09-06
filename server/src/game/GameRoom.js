@@ -259,6 +259,20 @@ export class GameRoom {
     return { success: true };
   }
 
+  // Bắt đầu nhanh phòng Luyện tập Solo cùng 5 Bot AI
+  startSoloPractice(playerId) {
+    if (playerId !== this.hostId) return { success: false, message: 'Chỉ Chủ phòng mới có quyền thao tác!' };
+    while (this.players.length < 6) {
+      this.addBot();
+    }
+    this.players.forEach((p) => {
+      if (p.isBot) p.isReady = true;
+    });
+    this.config.moderatorMode = 'ai'; // Đảm bảo chế độ AI để Host là người chơi bình thường
+    this.updateDefaultRoleConfig();
+    return this.startGame(playerId);
+  }
+
   // Chơi lại (Restart to Lobby)
   restartGame(playerId) {
     if (playerId !== this.hostId) return false;

@@ -116,6 +116,18 @@ export default function App() {
     });
   };
 
+  const handleCreateSoloRoom = (name, avatar, cb) => {
+    socket.emit('room:create_solo', { name, avatar }, (res) => {
+      if (res && res.success) {
+        setRoomCode(res.roomCode);
+        setInRoom(true);
+        if (cb) cb(null);
+      } else {
+        if (cb) cb(res?.message || 'Không thể khởi tạo phòng luyện tập');
+      }
+    });
+  };
+
   const handleJoinRoom = (code, name, avatar, cb) => {
     socket.emit('room:join', { code, name, avatar }, (res) => {
       if (res && res.success) {
@@ -209,6 +221,7 @@ export default function App() {
           <Lobby
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
+            onCreateSoloRoom={handleCreateSoloRoom}
           />
         ) : isLobbyPhase ? (
           <WaitingRoom
@@ -253,8 +266,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Bảng Quản Trò Toàn Năng (God Mode & AI Script cho Host) */}
-      {inRoom && !isLobbyPhase && isHost && (gameState?.isGodModerator || config?.moderatorMode === 'human' || myRole === 'moderator') && (
+      {/* Bảng Quản Trò Toàn Năng (Chỉ hiện khi phòng thực sự ở chế độ Quản trò Người thật) */}
+      {inRoom && !isLobbyPhase && isHost && (config?.moderatorMode === 'human' || myRole === 'moderator') && (
         <GameMasterPanel
           isHost={isHost}
           gameState={gameState}

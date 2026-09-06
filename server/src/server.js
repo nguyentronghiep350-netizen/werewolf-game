@@ -49,7 +49,7 @@ app.get('/api/room/:code', (req, res) => {
 // Phục vụ frontend nếu đã build
 const serverPublic = path.join(__dirname, '../public');
 const clientDist = path.join(__dirname, '../../client/dist');
-const staticDir = fs.existsSync(serverPublic) ? serverPublic : clientDist;
+const staticDir = fs.existsSync(clientDist) ? clientDist : serverPublic;
 
 if (fs.existsSync(staticDir)) {
   app.use(express.static(staticDir));
@@ -93,6 +93,19 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Error creating room:', err);
       if (callback) callback({ success: false, message: 'Không thể tạo phòng' });
+    }
+  });
+
+  // 1b. Tạo phòng chơi thử Solo ngay cùng 5 Bot AI (1-Click Solo Practice)
+  socket.on('room:create_solo', ({ name, avatar }, callback) => {
+    try {
+      const room = roomManager.createRoom(socket, name, avatar);
+      const startRes = room.startSoloPractice(socket.id);
+      console.log(`[Solo Practice Started] Code: ${room.code} by ${name}`);
+      if (callback) callback({ success: true, roomCode: room.code, ...startRes });
+    } catch (err) {
+      console.error('Error starting solo practice:', err);
+      if (callback) callback({ success: false, message: 'Không thể khởi tạo phòng luyện tập' });
     }
   });
 

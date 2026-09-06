@@ -9,7 +9,7 @@ const DEFAULT_NAMES = [
   'Trinh Sát Đêm', 'Tiên Nữ Rừng', 'Ẩn Giả Núi Cao', 'Thợ Bẫy Sói'
 ];
 
-export default function Lobby({ onCreateRoom, onJoinRoom }) {
+export default function Lobby({ onCreateRoom, onJoinRoom, onCreateSoloRoom }) {
   const [tab, setTab] = useState('create'); // 'create' | 'join'
   const [name, setName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('🧑‍🌾');
@@ -53,6 +53,23 @@ export default function Lobby({ onCreateRoom, onJoinRoom }) {
       setLoading(false);
       if (err) setError(err);
     });
+  };
+
+  const handleCreateSolo = (e) => {
+    if (e) e.preventDefault();
+    soundFx.playClick();
+    if (!name.trim()) {
+      setError('Vui lòng nhập tên của bạn!');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    if (onCreateSoloRoom) {
+      onCreateSoloRoom(name.trim(), selectedAvatar, (err) => {
+        setLoading(false);
+        if (err) setError(err);
+      });
+    }
   };
 
   const handleJoin = (e) => {
@@ -218,16 +235,29 @@ export default function Lobby({ onCreateRoom, onJoinRoom }) {
         </div>
 
         {/* Nút Action Chính (1-Click) */}
-        <div>
+        <div className="space-y-2.5">
           {tab === 'create' ? (
-            <button
-              onClick={handleCreate}
-              disabled={loading}
-              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-sm uppercase tracking-wider shadow-lg shadow-red-950/60 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98 disabled:opacity-50"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{loading ? 'Đang Khởi Tạo...' : 'Tạo Phòng Chơi Ngay'}</span>
-            </button>
+            <>
+              {/* Nút Chơi Thử Nhanh Với AI (1-Click) */}
+              <button
+                type="button"
+                onClick={handleCreateSolo}
+                disabled={loading}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-emerald-950/60 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98 disabled:opacity-50 border border-emerald-400/40"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300 animate-spin" style={{ animationDuration: '4s' }} />
+                <span>🎮 Chơi Thử Với AI (Vào Trận Ngay)</span>
+              </button>
+
+              <button
+                onClick={handleCreate}
+                disabled={loading}
+                className="w-full py-2.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98 disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{loading ? 'Đang Khởi Tạo...' : 'Tạo Phòng Chờ Bạn Bè'}</span>
+              </button>
+            </>
           ) : (
             <button
               onClick={handleJoin}

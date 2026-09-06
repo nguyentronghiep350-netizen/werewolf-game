@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Sun, Clock, Skull, Heart, Shield, Flame, Eye, Gavel, MessageSquare, ScrollText, Volume2, VolumeX, Pause, Play, ChevronRight, ToggleLeft, ToggleRight, Sparkles, Crown } from 'lucide-react';
+import { Moon, Sun, Clock, Skull, Heart, Shield, Flame, Eye, Gavel, MessageSquare, ScrollText, Volume2, VolumeX, Pause, Play, ChevronRight, ToggleLeft, ToggleRight, Sparkles, Crown, Check, Ban, FastForward } from 'lucide-react';
 import { soundFx } from '../utils/audio';
 import NightActionPanel from './NightActionPanel';
 import VotingPanel from './VotingPanel';
@@ -30,7 +30,9 @@ export default function GameScreen({
   onModeratorAction,
 }) {
   const [activeBottomTab, setActiveBottomTab] = useState('chat'); // 'chat' | 'logs'
-  const [isSpeakingTTS, setIsSpeakingTTS] = useState(false);
+  const [selectedTargetId, setSelectedTargetId] = useState('');
+  const [selectedTarget2Id, setSelectedTarget2Id] = useState('');
+  const [submittedNightAction, setSubmittedNightAction] = useState(false);
 
   const {
     phase,
@@ -52,6 +54,9 @@ export default function GameScreen({
     isGodModerator,
     godNightActions,
     nightActionsDone,
+    activeNightRole,
+    activeNightTitle,
+    activeNightPrompt,
   } = gameState || {};
 
   const me = players.find((p) => p.id === myId);
@@ -59,18 +64,27 @@ export default function GameScreen({
   const isNight = phase?.startsWith('NIGHT');
   const isHunterTurn = phase === 'HUNTER_ACTION';
   const isMyHunterTurn = isHunterTurn && hunterPending === me?.name;
-  const isModeratorUser = myRole === 'moderator' || (isHost && isGodModerator);
+  const isHumanMod = myRole === 'moderator' || (isHost && isGodModerator);
 
-  // Dừng phát TTS khi chuyển phase hoặc unmount
+  const isWolf = ['werewolf', 'alpha_wolf', 'white_wolf', 'wolf_pup'].includes(myRole);
+
+  // Xác định lượt ban đêm của bản thân
+  const isWolfTurn = isWolf && (activeNightRole === 'werewolf' || !activeNightRole);
+  const isWhiteWolfTurn = myRole === 'white_wolf' && (activeNightRole === 'white_wolf' || !activeNightRole);
+  const isSeerTurn = myRole === 'seer' && (activeNightRole === 'seer' || !activeNightRole);
+  const isGuardTurn = myRole === 'bodyguard' && (activeNightRole === 'bodyguard' || !activeNightRole);
+  const isWitchTurn = myRole === 'witch' && (activeNightRole === 'witch' || !activeNightRole);
+  const isCupidTurn = myRole === 'cupid' && (activeNightRole === 'cupid' || !activeNightRole);
+  const isMyNightTurn = isAlive && isNight && phase === 'NIGHT_ACTION' && (isWolfTurn || isWhiteWolfTurn || isSeerTurn || isGuardTurn || isWitchTurn || isCupidTurn);
+
+  // Reset target khi chuyển phase
   useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, [phase]);
+    setSelectedTargetId('');
+    setSelectedTarget2Id('');
+    setSubmittedNightAction(false);
+  }, [phase, activeNightRole]);
 
-  // Kích hoạt âm thanh khi đổi phase
+  // Âm thanh khi chuyển phase
   useEffect(() => {
     if (phase === 'NIGHT_START') {
       soundFx.playHowl();
@@ -84,487 +98,341 @@ export default function GameScreen({
     }
   }, [phase]);
 
-  // Phát âm thanh giọng đọc tiếng Việt Web Speech API
-  const handleSpeakTTS = (text) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      alert('Trình duyệt của bạn không hỗ trợ phát giọng đọc tự động!');
+  // Đếm số người sống
+  const alivePlayers = players.filter((p) => p.isAlive && p.role !== 'moderator');
+  const aliveCount = alivePlayers.length;
+  const skipNeeded = Math.ceil(aliveCount / 2);
+  const hasVotedSkip = discussionSkips.includes(myId);
+
+  // Xử lý khi click vào 1 người chơi trên bàn cờ
+  const handlePlayerClick = (p) => {
+    if (!p.isAlive) return;
+
+    // Trong ban đêm
+    if (isMyNightTurn && !submittedNightAction) {
+      soundFx.playClick();
+      if (isCupidTurn) {
+        if (!selectedTargetId) {
+          setSelectedTargetId(p.id);
+        } else if (selectedTargetId === p.id) {
+          setSelectedTargetId('');
+        } else if (!selectedTarget2Id) {
+          setSelectedTarget2Id(p.id);
+        } else if (selectedTarget2Id === p.id) {
+          setSelectedTarget2Id('');
+        } else {
+          setSelectedTargetId(p.id);
+        }
+      } else {
+        setSelectedTargetId((prev) => (prev === p.id ? '' : p.id));
+      }
       return;
     }
 
-    if (isSpeakingTTS) {
-      window.speechSynthesis.cancel();
-      setIsSpeakingTTS(false);
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'vi-VN';
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
-
-    const voices = window.speechSynthesis.getVoices();
-    const viVoice = voices.find((v) => v.lang.includes('vi') || v.lang.includes('VI'));
-    if (viVoice) {
-      utterance.voice = viVoice;
-    }
-
-    utterance.onstart = () => setIsSpeakingTTS(true);
-    utterance.onend = () => setIsSpeakingTTS(false);
-    utterance.onerror = () => setIsSpeakingTTS(false);
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // Thông tin tiêu đề phase
-  const getPhaseInfo = () => {
-    switch (phase) {
-      case 'STARTING':
-        return { title: 'CHUẨN BỊ BẮT ĐẦU', icon: Clock, color: 'text-amber-400', desc: 'Ván đấu đang được khởi tạo...' };
-      case 'NIGHT_START':
-        return {
-          title: `ĐÊM THỨ ${nightNumber}`,
-          icon: Moon,
-          color: 'text-indigo-400',
-          desc: 'Ngôi làng chìm vào bóng tối. Mọi người hãy nhắm mắt đi ngủ...',
-        };
-      case 'NIGHT_ACTION':
-        return {
-          title: gameState?.activeNightTitle ? `ĐÊM ${nightNumber} - ${gameState.activeNightTitle.toUpperCase()}` : `ĐÊM THỨ ${nightNumber}`,
-          icon: Moon,
-          color: 'text-indigo-400',
-          desc: gameState?.activeNightPrompt || 'Quản trò đang gọi các vai trò ban đêm theo thứ tự logic.',
-        };
-      case 'MORNING':
-        return {
-          title: `RẠNG SÁNG NGÀY ${dayNumber || 1}`,
-          icon: Sun,
-          color: 'text-amber-400',
-          desc: 'Mặt trời lên rọi sáng kết quả sau một đêm đẫm máu.',
-        };
-      case 'HUNTER_ACTION':
-        return {
-          title: 'THỢ SĂN TRẢ THÙ',
-          icon: Skull,
-          color: 'text-red-400',
-          desc: 'Thợ săn chuẩn bị bóp cò phát đạn oan nghiệt.',
-        };
-      case 'DAY_DISCUSSION':
-        return {
-          title: `NGÀY THỨ ${dayNumber} - THẢO LUẬN`,
-          icon: Sun,
-          color: 'text-amber-300',
-          desc: 'Dân làng tranh luận để tìm ra kẻ tình nghi.',
-        };
-      case 'DAY_VOTING':
-        return {
-          title: 'BỎ PHIẾU TREO CỔ',
-          icon: Gavel,
-          color: 'text-red-400',
-          desc: 'Hãy bỏ phiếu người bạn nghi ngờ là Ma Sói.',
-        };
-      case 'DAY_EXECUTION':
-        return {
-          title: 'THỰC THI PHÁN QUYẾT',
-          icon: Skull,
-          color: 'text-rose-500',
-          desc: 'Công bố kẻ bị dân làng đưa lên giàn treo cổ.',
-        };
-      case 'GAME_OVER':
-        return { title: 'KẾT THÚC TRẬN ĐẤU', icon: Clock, color: 'text-emerald-400' };
-      default:
-        return { title: 'ĐANG DIỄN RA', icon: Clock, color: 'text-white' };
+    // Trong pha bỏ phiếu ban ngày
+    if (phase === 'DAY_VOTING' && isAlive && p.id !== myId) {
+      soundFx.playClick();
+      setSelectedTargetId(p.id);
+      onDayVote(p.id);
     }
   };
 
-  const phaseInfo = getPhaseInfo();
-  const PhaseIcon = phaseInfo.icon;
+  // Xác nhận hành động ban đêm 1-chạm
+  const handleConfirmNightAction = () => {
+    if (!selectedTargetId) return;
+    soundFx.playClick();
 
-  const aliveNonModCount = players.filter((p) => p.isAlive && p.role !== 'moderator').length;
-  const totalNonModCount = players.filter((p) => p.role !== 'moderator').length;
+    if (isWolfTurn) {
+      onNightAction({ action: 'werewolf_vote', targetId: selectedTargetId });
+    } else if (isWhiteWolfTurn) {
+      onNightAction({ action: 'white_wolf_kill', targetId: selectedTargetId });
+    } else if (isSeerTurn) {
+      onNightAction({ action: 'seer_inspect', targetId: selectedTargetId });
+    } else if (isGuardTurn) {
+      onNightAction({ action: 'guard_protect', targetId: selectedTargetId });
+    } else if (isCupidTurn && selectedTarget2Id) {
+      onNightAction({ action: 'cupid_pair', target1Id: selectedTargetId, target2Id: selectedTarget2Id });
+    }
 
-  // Lời thoại hiện tại của Quản Trò
-  const currentVoiceLine = gameState?.activeNightPrompt || (moderatorScript[currentScriptStep]?.voicePrompt) || phaseInfo.desc;
+    setSubmittedNightAction(true);
+  };
+
+  // Tính số phiếu vote cho từng người
+  const voteCounts = {};
+  let skipVoteCount = 0;
+  Object.values(dayVotes).forEach((targetId) => {
+    if (targetId === 'skip') {
+      skipVoteCount++;
+    } else {
+      voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
+    }
+  });
+
+  const selectedTargetPlayer = players.find((p) => p.id === selectedTargetId);
+  const selectedTarget2Player = players.find((p) => p.id === selectedTarget2Id);
+
+  // Lời chỉ dẫn nhiệm vụ to rõ (Mission Directive)
+  const getMissionDirective = () => {
+    if (isHunterTurn) {
+      return isMyHunterTurn
+        ? { text: '🎯 BẠN ĐÃ BỊ LOẠI! Hãy bấm chọn 1 người để bắn phát đạn báo thù cuối cùng!', urgent: true }
+        : { text: '🔫 Thợ săn đang giương súng chuẩn bị kéo theo kẻ tử thù...', urgent: false };
+    }
+
+    if (phase === 'NIGHT_START') {
+      return { text: '🌙 Màn đêm buông xuống... Cả làng nhắm mắt đi ngủ!', urgent: false };
+    }
+
+    if (phase === 'NIGHT_ACTION') {
+      if (isMyNightTurn) {
+        if (isWolfTurn) return { text: '🐺 BẦY SÓI: Chạm vào 1 người trên bàn tròn rồi bấm Xác Nhận Cắn!', urgent: true };
+        if (isSeerTurn) return { text: '🔮 TIÊN TRI: Chạm vào 1 người trên bàn tròn để khai mở thân phận!', urgent: true };
+        if (isGuardTurn) return { text: '🛡️ BẢO VỆ: Chạm vào 1 người trên bàn tròn để che chở đêm nay!', urgent: true };
+        if (isWitchTurn) return { text: '🧪 PHÙ THỦY: Xem nạn nhân bị cắn và chọn bình thuốc bên dưới!', urgent: true };
+        if (isCupidTurn) return { text: '💘 CUPID: Chạm vào 2 người trên bàn tròn để se duyên định mệnh!', urgent: true };
+        if (isWhiteWolfTurn) return { text: '🐺 SÓI TRẮNG: Bạn có muốn cắn thêm 1 người không?', urgent: true };
+      }
+      return { text: `💤 Cả làng đang chìm trong giấc ngủ say... (Đang gọi: ${activeNightTitle || 'Ẩn danh'})`, urgent: false };
+    }
+
+    if (phase === 'MORNING') {
+      return { text: '🌅 Trời đã sáng! Quản trò đang công bố tin dữ đêm qua...', urgent: false };
+    }
+
+    if (phase === 'DAY_DISCUSSION') {
+      return { text: '☀️ THẢO LUẬN: Tranh luận tìm kẻ tình nghi, hoặc bấm Bỏ qua để Vote ngay!', urgent: false };
+    }
+
+    if (phase === 'DAY_VOTING') {
+      return isAlive
+        ? { text: '🗳️ BỎ PHIẾU TREO CỔ: Chạm vào người bạn nghi ngờ nhất trên bàn tròn!', urgent: true }
+        : { text: '👻 Bạn đã chết nên không thể tham gia bỏ phiếu.', urgent: false };
+    }
+
+    if (phase === 'DAY_EXECUTION') {
+      return { text: '⚖️ Phán quyết của dân làng đang được thực thi trên giàn treo cổ!', urgent: false };
+    }
+
+    return { text: 'Ma Sói Online - Cuộc chiến giữa Ánh Sáng và Bóng Tối', urgent: false };
+  };
+
+  const directive = getMissionDirective();
 
   return (
     <div className={`min-h-[calc(100vh-65px)] flex flex-col justify-between transition-colors duration-700 ${
       isNight ? 'bg-[#060813]' : 'bg-[#0a0e1a]'
     }`}>
-      {/* Top Banner Thanh Trạng Thái */}
-      <div className="max-w-6xl w-full mx-auto p-3 md:p-4 space-y-3.5">
-        <div className={`p-3.5 md:p-4 rounded-3xl border backdrop-blur-xl shadow-xl flex items-center justify-between transition-all ${
-          isNight
-            ? 'bg-slate-900/90 border-indigo-900/60 moon-glow'
-            : 'bg-slate-900/90 border-amber-900/40'
+      <div className="max-w-6xl w-full mx-auto p-3 md:p-4 space-y-3">
+        {/* ========================================================================= */}
+        {/* TOP STATUS HUD: PHASE + TIMER + MISSION DIRECTIVE */}
+        {/* ========================================================================= */}
+        <div className={`p-3.5 md:p-4 rounded-3xl border backdrop-blur-xl shadow-xl transition-all ${
+          isNight ? 'bg-slate-900/90 border-indigo-900/70 shadow-indigo-950/40' : 'bg-slate-900/90 border-amber-900/50 shadow-amber-950/30'
         }`}>
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-2xl ${
-              isNight ? 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/60' : 'bg-amber-950/80 text-amber-400 border border-amber-800/60'
-            }`}>
-              <PhaseIcon className="w-5 h-5 md:w-6 md:h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className={`text-sm md:text-base font-black tracking-wider ${phaseInfo.color}`}>
-                  {phaseInfo.title}
-                </h2>
-                {!isAlive && myRole !== 'moderator' && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-800 font-semibold">
-                    Đã Chết 👻
-                  </span>
-                )}
-                {isTimerPaused && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black uppercase tracking-wide animate-pulse">
-                    ⏸️ ĐANG TẠM DỪNG GIỜ
-                  </span>
-                )}
+          <div className="flex items-center justify-between gap-3">
+            {/* Phase Badge & Title */}
+            <div className="flex items-center gap-2.5">
+              <div className={`p-2 rounded-2xl ${isNight ? 'bg-indigo-950 text-indigo-400 border border-indigo-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
+                {isNight ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
               </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">{phaseInfo.desc}</p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black tracking-wider uppercase text-slate-300">
+                    {isNight ? `ĐÊM THỨ ${nightNumber}` : `NGÀY THỨ ${dayNumber || 1}`}
+                  </span>
+                  {!isAlive && myRole !== 'moderator' && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-800 font-bold">
+                      Hồn Ma 👻
+                    </span>
+                  )}
+                  {isTimerPaused && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black uppercase tracking-wider animate-pulse">
+                      TẠM DỪNG
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-sm md:text-base font-black text-white">
+                  {phase === 'DAY_DISCUSSION' ? 'THẢO LUẬN TÌM MA SÓI' :
+                   phase === 'DAY_VOTING' ? 'BỎ PHIẾU TREO CỔ' :
+                   phase === 'MORNING' ? 'KẾT QUẢ ĐÊM QUA' :
+                   activeNightTitle ? activeNightTitle.toUpperCase() : 'MÀN ĐÊM BUÔNG XUỐNG'}
+                </h2>
+              </div>
             </div>
+
+            {/* Big Timer */}
+            {timer > 0 && (
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border font-mono font-black text-lg md:text-xl shadow-inner ${
+                timer <= 5 ? 'bg-rose-950 border-rose-500 text-rose-300 animate-pulse' :
+                isTimerPaused ? 'bg-amber-950 border-amber-500 text-amber-300' :
+                'bg-slate-950/90 border-slate-800 text-white'
+              }`}>
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span>{timer}s</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {timer > 0 && (
-              <div className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-2xl border ${
-                isTimerPaused
-                  ? 'bg-amber-950 border-amber-500 text-amber-300'
-                  : 'bg-slate-950/90 border-slate-800 text-white'
-              }`}>
-                <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
-                <span className="text-lg md:text-xl font-black font-mono">
-                  {timer}s
-                </span>
-              </div>
+          {/* MISSION DIRECTIVE CALLOUT (HƯỚNG DẪN 1-DÒNG RÕ RÀNG NHƯ GAMESHOW) */}
+          <div className={`mt-2.5 p-2.5 rounded-2xl border flex items-center justify-between gap-2 text-xs md:text-sm font-bold transition-all ${
+            directive.urgent
+              ? 'bg-gradient-to-r from-red-950/90 via-rose-950/80 to-amber-950/90 border-rose-500/80 text-white shadow-lg shadow-rose-950/50 animate-pulse'
+              : 'bg-black/40 border-slate-800 text-slate-300'
+          }`}>
+            <span className="truncate">{directive.text}</span>
+            {hasVotedSkip && phase === 'DAY_DISCUSSION' && (
+              <span className="text-[10px] px-2 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-700 rounded-lg shrink-0">
+                Đã Vote Skip ✅
+              </span>
             )}
           </div>
         </div>
 
         {/* ========================================================================= */}
-        {/* BÀN ĐIỀU KHIỂN QUẢN TRÒ TRỰC TIẾP (GAME MASTER COMMAND DECK) */}
+        {/* QUẢN TRÒ THỦ CÔNG (CHỈ HIỆN KHI Ở CHẾ ĐỘ HUMAN MODERATOR) */}
         {/* ========================================================================= */}
-        {isModeratorUser && (
-          <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-950/90 via-slate-900 to-indigo-950/90 border-2 border-amber-500/70 shadow-2xl space-y-3 animate-fadeIn">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/30 pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl p-1 bg-amber-500 text-slate-950 rounded-xl">👑</span>
-                <div>
-                  <h3 className="font-black text-amber-300 text-xs md:text-sm uppercase tracking-wider">
-                    BÀN ĐIỀU KHIỂN QUẢN TRÒ (GOD DECK)
-                  </h3>
-                  <p className="text-[11px] text-slate-300">
-                    Bạn toàn quyền làm chủ nhịp độ trận đấu, không sợ bị trôi giờ!
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Nút Pause / Resume Timer */}
-                <button
-                  type="button"
-                  onClick={() => onModeratorAction && onModeratorAction('toggle_pause_timer')}
-                  className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow ${
-                    isTimerPaused
-                      ? 'bg-amber-500 text-slate-950 animate-pulse font-black'
-                      : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
-                  }`}
-                  title="Tạm dừng hoặc tiếp tục đồng hồ đếm ngược"
-                >
-                  {isTimerPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5" />}
-                  <span>{isTimerPaused ? 'Tiếp Tục Giờ' : 'Tạm Dừng Giờ'}</span>
-                </button>
-
-                {/* Chế độ Thủ Công / Tự Động */}
-                <button
-                  type="button"
-                  onClick={() => onModeratorAction && onModeratorAction('toggle_control_mode')}
-                  className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow ${
-                    moderatorControlMode === 'manual'
-                      ? 'bg-indigo-600 text-white border border-indigo-400'
-                      : 'bg-slate-800 text-slate-400 border border-slate-700'
-                  }`}
-                  title="Chuyển giữa chế độ Thủ công (chỉ chuyển khi Quản trò bấm Next) và Tự động (theo đồng hồ)"
-                >
-                  {moderatorControlMode === 'manual' ? (
-                    <>
-                      <ToggleRight className="w-4 h-4 text-emerald-300" />
-                      <span>Thủ Công (Bấm Next)</span>
-                    </>
-                  ) : (
-                    <>
-                      <ToggleLeft className="w-4 h-4 text-slate-400" />
-                      <span>Tự Động (Theo Giờ)</span>
-                    </>
-                  )}
-                </button>
-              </div>
+        {isHumanMod && (
+          <div className="p-2.5 bg-gradient-to-r from-amber-950/90 via-slate-900 to-indigo-950/90 border border-amber-500/60 rounded-2xl flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+              <Crown className="w-4 h-4 text-amber-400" />
+              <span>Quản Trò</span>
             </div>
-
-            {/* Khung Lời Thoại Cần Đọc Ngay */}
-            <div className="p-3 bg-black/40 border border-amber-500/40 rounded-2xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                  Lời Thoại Cần Đọc Lúc Này:
-                </span>
-
-                {/* Nút Đọc Giọng AI Web Speech API */}
-                <button
-                  type="button"
-                  onClick={() => handleSpeakTTS(currentVoiceLine)}
-                  className={`px-3 py-1 rounded-xl font-bold text-[11px] flex items-center gap-1.5 transition cursor-pointer shadow ${
-                    isSpeakingTTS
-                      ? 'bg-rose-600 text-white animate-pulse'
-                      : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black'
-                  }`}
-                  title="Máy tự đọc thoại tiếng Việt tự động cho làng nghe"
-                >
-                  {isSpeakingTTS ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                  <span>{isSpeakingTTS ? 'Dừng Đọc' : '🔊 Đọc Giọng AI Hộ Tôi'}</span>
-                </button>
-              </div>
-
-              <p className="text-white font-medium text-xs sm:text-sm leading-relaxed italic bg-slate-900/90 p-2.5 rounded-xl border border-slate-700 select-all">
-                "{currentVoiceLine}"
-              </p>
-            </div>
-
-            {/* BẢNG TÌNH HÌNH HÀNH ĐỘNG ĐÊM THỰC TẾ (LIVE INTEL FOR GOD MODERATOR) */}
-            {isNight && (
-              <div className="p-3 bg-black/60 border border-amber-500/30 rounded-2xl space-y-2">
-                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
-                  <Eye className="w-3.5 h-3.5 text-amber-400" />
-                  Diễn Biến Kỹ Năng Đêm Hiện Tại:
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className={`p-2 rounded-xl border transition ${godNightActions?.werewolfTargetId ? 'bg-rose-950/80 border-rose-500 shadow-md shadow-rose-950' : 'bg-slate-900/70 border-slate-800'}`}>
-                    <span className="font-bold block text-[10px] uppercase tracking-wider text-rose-400">🐺 SÓI ĐANG CẮN:</span>
-                    <span className="font-black text-xs text-white truncate block mt-0.5">
-                      {godNightActions?.werewolfTargetName ? `💀 ${godNightActions.werewolfTargetName}` : 'Đang chờ Sói vote...'}
-                    </span>
-                  </div>
-                  <div className={`p-2 rounded-xl border transition ${godNightActions?.bodyguardTargetId ? 'bg-cyan-950/80 border-cyan-500 shadow-md shadow-cyan-950' : 'bg-slate-900/70 border-slate-800'}`}>
-                    <span className="font-bold block text-[10px] uppercase tracking-wider text-cyan-400">🛡️ BẢO VỆ GIỮ:</span>
-                    <span className="font-black text-xs text-white truncate block mt-0.5">
-                      {godNightActions?.bodyguardTargetName ? `✨ ${godNightActions.bodyguardTargetName}` : 'Chưa chọn'}
-                    </span>
-                  </div>
-                  <div className={`p-2 rounded-xl border transition ${godNightActions?.seerTargetId ? 'bg-purple-950/80 border-purple-500 shadow-md shadow-purple-950' : 'bg-slate-900/70 border-slate-800'}`}>
-                    <span className="font-bold block text-[10px] uppercase tracking-wider text-purple-400">🔮 TIÊN TRI SOI:</span>
-                    <span className="font-black text-xs text-white truncate block mt-0.5">
-                      {godNightActions?.seerTargetName ? `${godNightActions.seerTargetName} (${godNightActions.seerResult?.isWerewolf ? 'SÓI 🐺' : 'DÂN 👤'})` : 'Chưa soi'}
-                    </span>
-                  </div>
-                  <div className={`p-2 rounded-xl border transition ${(godNightActions?.witchSave || godNightActions?.witchKillTargetId) ? 'bg-emerald-950/80 border-emerald-500 shadow-md shadow-emerald-950' : 'bg-slate-900/70 border-slate-800'}`}>
-                    <span className="font-bold block text-[10px] uppercase tracking-wider text-emerald-400">🧪 PHÙ THỦY:</span>
-                    <span className="font-black text-xs text-white truncate block mt-0.5">
-                      {godNightActions?.witchSave ? 'Cứu: ✅ ' : ''}
-                      {godNightActions?.witchKillTargetName ? `Độc: ☠️ ${godNightActions.witchKillTargetName}` : (!godNightActions?.witchSave ? 'Chưa hành động' : '')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Nút Hành Động Chuyển Lượt / Chuyển Pha */}
-            <div className="flex flex-col sm:flex-row items-center gap-2">
-              {isNight ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onModeratorAction && onModeratorAction('toggle_pause_timer')}
+                className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold flex items-center gap-1 cursor-pointer text-xs"
+              >
+                {isTimerPaused ? <Play className="w-3 h-3 text-emerald-400 fill-current" /> : <Pause className="w-3 h-3 text-amber-400" />}
+                <span>{isTimerPaused ? 'Chạy Giờ' : 'Dừng Giờ'}</span>
+              </button>
+              {isNight && (
                 <button
                   type="button"
                   onClick={() => onModeratorAction && onModeratorAction('advance_night_step')}
-                  className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-orange-950/60 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-98"
+                  className="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black flex items-center gap-1 cursor-pointer text-xs shadow"
                 >
-                  <ChevronRight className="w-4 h-4 stroke-[3]" />
-                  <span>
-                    {nightActionsDone ? '✓ ĐÃ XONG KỸ NĂNG - BẤM CHUYỂN LƯỢT TIẾP' : 'CHUYỂN SANG VAI TRÒ TIẾP THEO (NEXT TURN)'}
-                  </span>
+                  <span>Chuyển Lượt ⏩</span>
                 </button>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 w-full">
-                  <button
-                    type="button"
-                    onClick={() => onModeratorAction && onModeratorAction('set_phase', { phase: 'NIGHT_ACTION' })}
-                    className="py-2.5 px-2 rounded-xl bg-indigo-950 hover:bg-indigo-900 border border-indigo-700 text-indigo-200 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Sang Đêm 🌙</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onModeratorAction && onModeratorAction('set_phase', { phase: 'DAY_DISCUSSION' })}
-                    className="py-2.5 px-2 rounded-xl bg-amber-950 hover:bg-amber-900 border border-amber-700 text-amber-200 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Sun className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Thảo Luận ☀️</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onModeratorAction && onModeratorAction('set_phase', { phase: 'DAY_VOTING' })}
-                    className="py-2.5 px-2 rounded-xl bg-rose-950 hover:bg-rose-900 border border-rose-700 text-rose-200 font-bold text-xs transition flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Gavel className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Bỏ Phiếu 🗳️</span>
-                  </button>
-                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Thông báo kết quả sáng (Morning Death announcement) */}
+        {/* ========================================================================= */}
+        {/* THÔNG BÁO RẠNG SÁNG (MORNING DEATH ANNOUNCEMENT) */}
+        {/* ========================================================================= */}
         {phase === 'MORNING' && (
           <div className="p-3.5 rounded-3xl bg-slate-900/90 border border-amber-800/60 shadow-xl text-center animate-fadeIn">
-            <div className="text-xl mb-0.5">🌅</div>
             <h3 className="text-xs font-bold text-amber-300 uppercase tracking-wider">
               Kết Quả Đêm Thứ {nightNumber}
             </h3>
             {nightDeaths.length === 0 ? (
               <p className="text-xs text-emerald-400 mt-1 font-medium">
-                Một đêm yên bình lạ kỳ! Không có ai phải bỏ mạng đêm qua.
+                Một đêm yên bình! Không có ai bị sát hại đêm qua.
               </p>
             ) : (
-              <div className="mt-1.5 space-y-1">
-                <p className="text-[11px] text-rose-400 font-bold">
-                  Bóng đêm đã cướp đi sinh mạng của:
-                </p>
-                <div className="flex flex-wrap justify-center gap-1.5 mt-1">
-                  {nightDeaths.map((d) => (
-                    <span
-                      key={d.id}
-                      className="px-2.5 py-0.5 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs font-semibold flex items-center gap-1"
-                    >
-                      <Skull className="w-3 h-3" />
-                      {d.name} ({d.roleName}) - {d.reason}
-                    </span>
-                  ))}
-                </div>
+              <div className="mt-1.5 flex flex-wrap justify-center gap-1.5">
+                {nightDeaths.map((d) => (
+                  <span
+                    key={d.id}
+                    className="px-2.5 py-0.5 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs font-semibold flex items-center gap-1"
+                  >
+                    <Skull className="w-3 h-3" />
+                    {d.name} ({d.roleName}) - {d.reason}
+                  </span>
+                ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Bàn Chơi Danh Sách Người Chơi */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-3.5 md:p-4 backdrop-blur-xl shadow-xl space-y-2.5">
-          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
-            <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-              BÀN TRÒN DÂN LÀNG ({aliveNonModCount}/{totalNonModCount} CÒN SỐNG)
-            </h3>
+        {/* ========================================================================= */}
+        {/* BÀN TRÒN DÂN LÀNG - ĐẤU TRƯỜNG TƯƠNG TÁC 1-CHẠM (CLICK-ON-BOARD) */}
+        {/* ========================================================================= */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-3 md:p-4 backdrop-blur-xl shadow-xl space-y-2.5">
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 text-xs">
+            <span className="font-bold text-slate-300 uppercase tracking-wider">
+              BÀN TRÒN DÂN LÀNG ({aliveCount}/{players.filter(p => p.role !== 'moderator').length} CÒN SỐNG)
+            </span>
             <span className="text-[11px] text-slate-400">
-              {totalNonModCount - aliveNonModCount} Đã chết
+              Chạm trực tiếp vào Avatar để tương tác
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
             {players.map((p) => {
               const isMe = p.id === myId;
-              const hasVote = dayVotes[p.id];
-              const isProtected = isAlive && myRole === 'bodyguard' && me?.lastProtectedId === p.id;
-              const isMyLover = p.isLover;
+              const isSelected = selectedTargetId === p.id || selectedTarget2Id === p.id;
+              const isCupid1 = selectedTargetId === p.id && isCupidTurn;
+              const isCupid2 = selectedTarget2Id === p.id && isCupidTurn;
+              const votesForP = voteCounts[p.id] || 0;
+              const hasVotedForThis = dayVotes[myId] === p.id;
 
-              const isWolfTarget = isModeratorUser && isNight && godNightActions?.werewolfTargetId === p.id;
-              const isGuardTarget = isModeratorUser && isNight && godNightActions?.bodyguardTargetId === p.id;
-              const isSeerTarget = isModeratorUser && isNight && godNightActions?.seerTargetId === p.id;
-              const isWitchKillTarget = isModeratorUser && isNight && godNightActions?.witchKillTargetId === p.id;
+              const isWolfTarget = isGodModerator && isNight && godNightActions?.werewolfTargetId === p.id;
+              const isGuardTarget = isGodModerator && isNight && godNightActions?.bodyguardTargetId === p.id;
 
               const voice = voiceStates[p.id];
               const isSpeaking = voice?.isSpeaking;
-              const inVoice = voice?.inVoice;
-              const isMuted = voice?.isMuted;
+
+              // Cho phép click nếu còn sống và đang trong lượt chọn
+              const canClick = p.isAlive && (isMyNightTurn || (phase === 'DAY_VOTING' && isAlive && !isMe));
 
               return (
-                <div
+                <button
+                  type="button"
                   key={p.id}
-                  className={`p-2 rounded-2xl border transition-all duration-200 relative flex flex-col items-center text-center ${
-                    isSpeaking
-                      ? 'ring-2 ring-emerald-400 bg-emerald-950/40 border-emerald-500 shadow-lg shadow-emerald-950/60 scale-102'
+                  disabled={!canClick && !isMe}
+                  onClick={() => handlePlayerClick(p)}
+                  className={`p-2.5 rounded-2xl border transition-all duration-200 relative flex flex-col items-center text-center select-none ${
+                    isSelected
+                      ? 'ring-4 ring-amber-400 bg-amber-950/60 border-amber-300 shadow-xl shadow-amber-950/80 scale-105 z-10'
+                      : isSpeaking
+                      ? 'ring-2 ring-emerald-400 bg-emerald-950/40 border-emerald-500 shadow-md'
                       : isWolfTarget
-                      ? 'ring-2 ring-rose-500 bg-rose-950/60 border-rose-500 shadow-lg shadow-rose-950/80 animate-pulse'
-                      : isGuardTarget
-                      ? 'ring-2 ring-cyan-400 bg-cyan-950/50 border-cyan-400 shadow-md shadow-cyan-950'
+                      ? 'ring-2 ring-rose-500 bg-rose-950/60 border-rose-500'
                       : !p.isAlive
-                      ? 'bg-slate-950/60 border-slate-800 opacity-50 grayscale'
+                      ? 'bg-slate-950/40 border-slate-800 opacity-40 grayscale cursor-not-allowed'
+                      : canClick
+                      ? 'bg-slate-800/80 border-slate-700 hover:border-amber-400 hover:bg-slate-800 hover:scale-102 cursor-pointer shadow-sm'
                       : isMe
                       ? 'bg-slate-800/90 border-indigo-500 shadow-md shadow-indigo-950/50'
                       : 'bg-slate-800/40 border-slate-700/60'
                   }`}
                 >
-                  {/* Status Badges */}
+                  {/* Badges Status */}
                   <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
-                    {isMyLover && (
-                      <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" title="Người yêu của bạn" />
-                    )}
-                    {isProtected && (
-                      <Shield className="w-3.5 h-3.5 text-emerald-400" title="Bạn đã bảo vệ" />
-                    )}
+                    {p.isLover && <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />}
+                    {isGodModerator && isGuardTarget && <Shield className="w-3.5 h-3.5 text-cyan-400" />}
                   </div>
 
-                  {/* Voice Status Badge */}
-                  {inVoice && (
-                    <div
-                      className="absolute top-1.5 left-1.5 flex items-center"
-                      title={isMuted ? 'Đang tắt mic' : isSpeaking ? 'Đang nói' : 'Đang trong voice'}
-                    >
-                      {isMuted ? (
-                        <span className="text-[10px] bg-red-950 text-red-300 px-1 py-0.2 rounded border border-red-800 leading-none">
-                          🔇
-                        </span>
-                      ) : isSpeaking ? (
-                        <span className="flex h-2.5 w-2.5 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                        </span>
-                      ) : (
-                        <span className="text-[10px] bg-emerald-950 text-emerald-300 px-1 py-0.2 rounded border border-emerald-800 leading-none">
-                          🎙️
-                        </span>
-                      )}
+                  {/* Mic Status */}
+                  {voice?.inVoice && (
+                    <div className="absolute top-1.5 left-1.5 text-[10px]">
+                      {voice.isMuted ? '🔇' : isSpeaking ? '🟢' : '🎙️'}
                     </div>
                   )}
 
-                  <div className="relative text-2xl md:text-3xl my-0.5">
+                  {/* Avatar */}
+                  <div className="relative text-3xl md:text-4xl my-1">
                     {p.avatar}
                     {!p.isAlive && (
-                      <span className="absolute -bottom-1 -right-1 text-xs bg-black/90 rounded-full p-0.5">
+                      <span className="absolute -bottom-1 -right-1 text-sm bg-black/90 rounded-full p-0.5">
                         💀
                       </span>
                     )}
                   </div>
 
+                  {/* Name */}
                   <span className="font-bold text-white text-xs truncate max-w-full">
-                    {p.name}
+                    {p.name} {isMe ? '(Bạn)' : ''}
                   </span>
 
-                  {/* Badges hành động ban đêm cho Quản trò */}
-                  {isWolfTarget && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-600 text-white font-black tracking-tight mt-0.5 animate-bounce">
-                      🐺 SÓI ĐANG CẮN
-                    </span>
-                  )}
-                  {isGuardTarget && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-cyan-600 text-white font-black tracking-tight mt-0.5">
-                      🛡️ ĐƯỢC BẢO VỆ
-                    </span>
-                  )}
-                  {isSeerTarget && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-purple-600 text-white font-black tracking-tight mt-0.5">
-                      🔮 TIÊN TRI SOI
-                    </span>
-                  )}
-                  {isWitchKillTarget && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-black tracking-tight mt-0.5">
-                      🧪 PHÙ THỦY ĐỘC
-                    </span>
-                  )}
-
-                  {/* Hiển thị vai trò nếu đã chết, được reveal, hoặc bản thân là Quản Trò */}
+                  {/* Role text if revealed */}
                   {p.role === 'moderator' ? (
-                    <span className="text-[10px] font-bold text-amber-400 mt-0.5 truncate flex items-center justify-center gap-0.5">
-                      👑 Quản Trò
-                    </span>
+                    <span className="text-[10px] font-bold text-amber-400 mt-0.5">👑 Quản Trò</span>
                   ) : p.role ? (
-                    <span
-                      className="text-[10px] font-semibold mt-0.5 truncate"
-                      style={{ color: p.roleDetails?.color || '#38bdf8' }}
-                    >
+                    <span className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: p.roleDetails?.color || '#38bdf8' }}>
                       {p.roleDetails?.name || p.role}
                     </span>
                   ) : (
@@ -573,45 +441,74 @@ export default function GameScreen({
                     </span>
                   )}
 
-                  {/* Quick God Actions dành cho Quản Trò trên từng ô người chơi */}
-                  {isModeratorUser && p.role !== 'moderator' && (
-                    <div className="flex items-center gap-1 mt-1">
-                      {p.isAlive ? (
-                        <button
-                          type="button"
-                          onClick={() => onModeratorAction && onModeratorAction('kill', { targetId: p.id })}
-                          className="px-1.5 py-0.5 rounded bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-[9px] font-bold cursor-pointer transition"
-                          title="Xử tử người này"
-                        >
-                          Xử tử 💀
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => onModeratorAction && onModeratorAction('revive', { targetId: p.id })}
-                          className="px-1.5 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-[9px] font-bold cursor-pointer transition"
-                          title="Hồi sinh người này"
-                        >
-                          Hồi sinh ✨
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Hiển thị vote nếu có */}
-                  {hasVote && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-red-950 text-red-300 border border-red-800 mt-1 font-mono">
-                      Đã Vote
+                  {/* Live Vote Count Badges */}
+                  {phase === 'DAY_VOTING' && votesForP > 0 && (
+                    <span className="mt-1 px-2 py-0.5 rounded-full bg-rose-600 text-white font-mono font-bold text-[10px] animate-pulse">
+                      🗳️ {votesForP} phiếu
                     </span>
                   )}
-                </div>
+
+                  {/* Selected Indicator Label */}
+                  {isSelected && (
+                    <span className="mt-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-wider">
+                      {isCupid1 ? 'Người Yêu 1' : isCupid2 ? 'Người Yêu 2' : 'ĐÃ CHỌN'}
+                    </span>
+                  )}
+
+                  {hasVotedForThis && (
+                    <span className="mt-0.5 text-[9px] text-emerald-400 font-bold">
+                      Phiếu của bạn ✅
+                    </span>
+                  )}
+                </button>
               );
             })}
           </div>
         </div>
 
-        {/* Panel Hành Động Ban Đêm (Chỉ hiện cho người chơi thường) */}
-        {isNight && myRole !== 'moderator' && (
+        {/* ========================================================================= */}
+        {/* ACTION DOCK 1-CHẠM: XÁC NHẬN HÀNH ĐỘNG BAN ĐÊM (CONFIRM BAR) */}
+        {/* ========================================================================= */}
+        {isMyNightTurn && (
+          <div className="p-3 bg-gradient-to-r from-red-950/80 via-slate-900 to-indigo-950/80 border-2 border-amber-500/70 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🎯</span>
+              <div>
+                <span className="text-[11px] text-slate-400 block">Mục tiêu đã chọn:</span>
+                <span className="text-sm font-black text-white">
+                  {isCupidTurn ? (
+                    selectedTargetPlayer && selectedTarget2Player ? `${selectedTargetPlayer.name} 💘 ${selectedTarget2Player.name}` : 'Chạm 2 người trên bàn'
+                  ) : (
+                    selectedTargetPlayer ? `${selectedTargetPlayer.avatar} ${selectedTargetPlayer.name}` : 'Chưa chọn (Chạm 1 người trên bàn)'
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleConfirmNightAction}
+              disabled={isCupidTurn ? (!selectedTargetId || !selectedTarget2Id || submittedNightAction) : (!selectedTargetId || submittedNightAction)}
+              className="w-full sm:w-auto py-2.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg disabled:opacity-40 cursor-pointer transition transform active:scale-95"
+            >
+              {submittedNightAction ? '✓ Đã Xác Nhận' : 'XÁC NHẬN HÀNH ĐỘNG'}
+            </button>
+          </div>
+        )}
+
+        {/* Kết quả Tiên Tri soi */}
+        {seerResult && isNight && myRole === 'seer' && (
+          <div className="p-3.5 bg-purple-950/80 border border-purple-500 rounded-2xl text-center space-y-1 shadow-lg animate-fadeIn">
+            <span className="text-2xl">🔮</span>
+            <h4 className="text-xs font-bold text-purple-300 uppercase">KẾT QUẢ SOI THÂN PHẬN:</h4>
+            <p className="text-sm font-black text-white">
+              {seerResult.targetName} thuộc: <span className={seerResult.isWerewolf ? 'text-red-400' : 'text-emerald-400'}>{seerResult.roleName} ({seerResult.team === 'werewolf' ? 'PHE SÓI 🐺' : 'PHE DÂN 🧑‍🌾'})</span>
+            </p>
+          </div>
+        )}
+
+        {/* Panel Hành Động Phụ (Ví dụ Phù Thủy chọn bình thuốc) */}
+        {isNight && myRole === 'witch' && isMyNightTurn && (
           <NightActionPanel
             myRole={myRole}
             isAlive={isAlive}
@@ -619,49 +516,74 @@ export default function GameScreen({
             myId={myId}
             nightNumber={nightNumber}
             onNightAction={onNightAction}
-            seerResult={seerResult}
             witchVictim={witchVictim}
-            activeNightRole={gameState?.activeNightRole}
-            activeNightStep={gameState?.activeNightStep}
-            activeNightTitle={gameState?.activeNightTitle}
-            activeNightPrompt={gameState?.activeNightPrompt}
+            activeNightRole={activeNightRole}
+            activeNightTitle={activeNightTitle}
+            activeNightPrompt={activeNightPrompt}
           />
         )}
 
-        {/* Panel Bỏ Phiếu & Thảo Luận Ban Ngày */}
-        {(phase === 'DAY_DISCUSSION' || phase === 'DAY_VOTING') && myRole !== 'moderator' && (
-          <VotingPanel
-            phase={phase}
-            players={players}
-            myId={myId}
-            isAlive={isAlive}
-            dayVotes={dayVotes}
-            discussionSkips={discussionSkips}
-            onDayVote={onDayVote}
-            onSkipDiscussion={onSkipDiscussion}
-          />
+        {/* ========================================================================= */}
+        {/* ACTION DOCK BAN NGÀY: THẢO LUẬN & BỎ PHIẾU */}
+        {/* ========================================================================= */}
+        {phase === 'DAY_DISCUSSION' && isAlive && (
+          <div className="p-3 bg-slate-900/90 border border-amber-500/40 rounded-2xl flex items-center justify-between gap-2 shadow-lg">
+            <div className="flex items-center gap-2 text-xs text-slate-300">
+              <span>🗣️ Thảo luận cùng làng</span>
+              <span className="text-[11px] text-slate-500 hidden sm:inline">• Bấm Bỏ qua nếu đã rõ mục tiêu</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onSkipDiscussion()}
+              disabled={hasVotedSkip}
+              className={`py-2 px-4 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer shadow ${
+                hasVotedSkip ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black hover:scale-102'
+              }`}
+            >
+              <FastForward className="w-4 h-4" />
+              <span>{hasVotedSkip ? `Đã Đồng Ý (${discussionSkips.length}/${skipNeeded})` : `Bỏ Qua Thảo Luận (${discussionSkips.length}/${skipNeeded})`}</span>
+            </button>
+          </div>
         )}
 
-        {/* Khu vực Giao Tiếp & Nhật Ký (Tabbed View for Mobile & Compact Desktop) */}
+        {phase === 'DAY_VOTING' && isAlive && (
+          <div className="p-3 bg-slate-900/90 border border-rose-500/40 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-2 shadow-lg">
+            <div className="text-xs text-slate-300">
+              <span>Chạm 1 người trên bàn tròn để vote. Hoặc:</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onDayVote('skip')}
+              className={`py-2 px-4 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer ${
+                dayVotes[myId] === 'skip' ? 'bg-amber-600 text-slate-950 font-black' : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+              }`}
+            >
+              <Ban className="w-4 h-4" />
+              <span>Bỏ Phiếu Trắng ({skipVoteCount} phiếu)</span>
+            </button>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* KHU VỰC GIAO TIẾP (CHAT BOX & GAME LOGS) */}
+        {/* ========================================================================= */}
         <div className="space-y-2 pb-24">
           <div className="flex bg-slate-950/70 p-1 rounded-2xl border border-slate-800 max-w-xs">
             <button
+              type="button"
               onClick={() => setActiveBottomTab('chat')}
               className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeBottomTab === 'chat'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                activeBottomTab === 'chat' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
               <span>Hộp Chat</span>
             </button>
             <button
+              type="button"
               onClick={() => setActiveBottomTab('logs')}
               className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeBottomTab === 'logs'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
+                activeBottomTab === 'logs' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
             >
               <ScrollText className="w-3.5 h-3.5 text-amber-400" />
@@ -683,7 +605,7 @@ export default function GameScreen({
         </div>
       </div>
 
-      {/* Hunter Revenge Modal */}
+      {/* Hunter Shot Modal */}
       {isHunterTurn && (
         <HunterActionModal
           hunterPendingName={hunterPending}
@@ -718,4 +640,3 @@ export default function GameScreen({
     </div>
   );
 }
-

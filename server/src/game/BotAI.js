@@ -83,8 +83,8 @@ export class BotAI {
         if (botWolves.length > 0) {
           const nonWolves = this.room.players.filter((p) => p.isAlive && !isWerewolfRole(p.role));
           if (nonWolves.length > 0) {
-            const humanTarget = nonWolves.find((p) => !p.isBot);
-            const chosenTarget = (humanTarget && Math.random() < 0.65) ? humanTarget : nonWolves[Math.floor(Math.random() * nonWolves.length)];
+            // Chọn công bằng giữa tất cả người chơi không phải sói (không săn người thật)
+            const chosenTarget = nonWolves[Math.floor(Math.random() * nonWolves.length)];
 
             for (const wolf of botWolves) {
               gameState.handleNightAction(wolf, {
