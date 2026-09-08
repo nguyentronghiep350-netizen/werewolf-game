@@ -42,12 +42,19 @@ if (aiSockets.status !== 0) {
   process.exit(1);
 }
 
-console.log('\n>>> [7/7] CHẠY BỘ KIỂM THỬ GAMEPLAY BAN ĐÊM TUẦN TỰ (SEQUENTIAL NIGHT TURNS)...');
+console.log('\n>>> [7/8] CHẠY BỘ KIỂM THỬ GAMEPLAY BAN ĐÊM TUẦN TỰ (SEQUENTIAL NIGHT TURNS)...');
 const seqNight = spawnSync('node', ['server/test/sequential_night.test.js'], { stdio: 'inherit' });
 if (seqNight.status !== 0) {
   console.error('Kiểm thử Gameplay Ban Đêm Tuần Tự thất bại!');
   process.exit(1);
 }
 
-console.log('\n🌟 TOÀN BỘ 7 BỘ KIỂM THỬ VÀ MÔ PHỎNG ĐỀU VƯỢT QUA XUẤT SẮC 100%! 🌟');
+console.log('\n>>> [8/8] CHẠY BỘ KIỂM THỬ MIỄN NHIỄM QUẢN TRÒ & THỜI GIAN KHUNG CHAT...');
+const modImmune = spawnSync('node', ['server/test/moderator_immunity_and_chat_time.test.js'], { stdio: 'inherit' });
+if (modImmune.status !== 0) {
+  console.error('Kiểm thử Miễn Nhiễm Quản Trò & Khung Chat thất bại!');
+  process.exit(1);
+}
+
+console.log('\n🌟 TOÀN BỘ 8 BỘ KIỂM THỬ VÀ MÔ PHỎNG ĐỀU VƯỢT QUA XUẤT SẮC 100%! 🌟');
 process.exit(0);

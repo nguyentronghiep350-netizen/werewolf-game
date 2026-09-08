@@ -350,7 +350,7 @@ export class GameState {
     if (player.role === ROLES.CUPID && this.nightNumber === 1 && action === 'cupid_pair') {
       const p1 = this.getPlayer(targetId);
       const p2 = this.getPlayer(target2Id);
-      if (p1 && p2 && p1.id !== p2.id && p1.isAlive && p2.isAlive) {
+      if (p1 && p2 && p1.id !== p2.id && p1.isAlive && p2.isAlive && p1.role !== ROLES.MODERATOR && p2.role !== ROLES.MODERATOR) {
         this.nightActions.cupidTarget1 = p1.id;
         this.nightActions.cupidTarget2 = p2.id;
         p1.loverId = p2.id;
@@ -378,7 +378,7 @@ export class GameState {
     // 2. Bảo Vệ (Bodyguard)
     if (player.role === ROLES.BODYGUARD && action === 'protect') {
       const target = this.getPlayer(targetId);
-      if (target && target.isAlive && target.id !== player.lastProtectedId) {
+      if (target && target.isAlive && target.role !== ROLES.MODERATOR && target.id !== player.lastProtectedId) {
         this.nightActions.bodyguardTarget = target.id;
         player.lastProtectedId = target.id;
         this.addLog('night', `🛡️ Bảo Vệ đã chọn che chở cho: ${target.name}`, { secret: true });
@@ -391,7 +391,7 @@ export class GameState {
     // 3. Ma Sói (Werewolf) vote cắn
     if (isWerewolfRole(player.role) && action === 'werewolf_vote') {
       const target = this.getPlayer(targetId);
-      if (target && target.isAlive) {
+      if (target && target.isAlive && target.role !== ROLES.MODERATOR) {
         this.nightActions.werewolfVotes[player.id] = target.id;
 
         // Báo cho toàn bộ đàn sói cập nhật phiếu bầu của nhau
@@ -415,7 +415,7 @@ export class GameState {
     // 4. Tiên Tri (Seer) soi
     if (player.role === ROLES.SEER && action === 'seer_inspect') {
       const target = this.getPlayer(targetId);
-      if (target && target.isAlive && target.id !== player.id) {
+      if (target && target.isAlive && target.role !== ROLES.MODERATOR && target.id !== player.id) {
         this.nightActions.seerTarget = target.id;
         const targetRoleDef = ROLE_DEFINITIONS[target.role] || { name: target.role, team: 'village' };
         const result = {
@@ -445,7 +445,7 @@ export class GameState {
       }
       if (killTargetId && !player.witchKillUsed) {
         const killTarget = this.getPlayer(killTargetId);
-        if (killTarget && killTarget.isAlive) {
+        if (killTarget && killTarget.isAlive && killTarget.role !== ROLES.MODERATOR) {
           this.nightActions.witchKillTarget = killTarget.id;
           player.witchKillUsed = true;
           this.addLog('night', `🧪 Phù Thủy đã ném bình ĐỘC tiêu diệt: ${killTarget.name}`, { secret: true });
@@ -739,7 +739,7 @@ export class GameState {
     const hunter = this.getPlayer(playerId);
     const target = this.getPlayer(targetId);
 
-    if (hunter && target && target.isAlive && target.id !== hunter.id) {
+    if (hunter && target && target.isAlive && target.role !== ROLES.MODERATOR && target.id !== hunter.id) {
       hunter.hunterShotUsed = true;
       this.finishHunterTurn(target);
       return true;
@@ -752,7 +752,7 @@ export class GameState {
     const hunter = this.getPlayer(this.hunterPending);
     this.hunterPending = null;
 
-    if (target && target.isAlive) {
+    if (target && target.isAlive && target.role !== ROLES.MODERATOR) {
       this.killPlayer(target, `Bị Thợ Săn ${hunter.name} bắn hạ trước khi chết`);
       this.addLog('death', `Đoàng! Phát súng bạc oan nghiệt của Thợ Săn ${hunter.name} đã kết liễu ${target.name} (${ROLE_DEFINITIONS[target.role].name})!`);
 
@@ -793,6 +793,62 @@ export class GameState {
     }
   }
 
+  // Đánh dấu người chơi đã chết (Bảo vệ Quản Trò không thể bị kill trừ khi God tự xử)
+  killPlayer(player, reason) {
+    if (!player) return;
+    player.isAlive = false;
+    player.deathReason = reason;
+    player.deathNight = this.nightNumber;
+  }
+
+  // Vào Rạng Sáng (Morning)
+  enterMorning() {
+    this.phase = PHASES.MORNING;
+
+    if (this.nightDeaths.length === 0) {
+      this.addLog('day', `Mặt trời đã lên trên ngôi làng. Đêm qua trôi qua trong bình yên, không có ai thiệt mạng!`);
+    } else {
+      const deathNames = this.nightDeaths.map((d) => `${d.name} (${d.roleName})`).join(', ');
+      this.addLog('death', `Mặt trời mọc rọi sáng bi kịch. Đêm qua đã có người ra đi vĩnh viễn: ${deathNames}.`);
+    }
+
+    this.room.broadcastState();
+
+    // Nếu có Thợ Săn kích hoạt bắn trả thù
+    if (this.checkAndTriggerHunterTurn()) {
+      return;
+    }
+
+    // Kiểm tra kết thúc game ngay
+    if (this.checkWinCondition()) {
+      return;
+    }
+
+    // Hiển thị kết quả sáng trong 6 giây rồi sang thảo luận
+    this.startTimer(6, null, () => {
+      this.enterDayDiscussion();
+    });
+  }
+
+  // Lượt Thợ Săn bắn trả thù
+  enterHunterTurn() {
+    this.phase = PHASES.HUNTER_ACTION;
+    const hunter = this.getPlayer(this.hunterPending);
+    this.addLog('system', `Thợ Săn ${hunter ? hunter.name : ''} đang giương súng trả thù trước khi ngã xuống!`);
+    this.room.broadcastState();
+
+    if (hunter && hunter.isBot) {
+      // Bot Thợ săn chọn bắn
+      this.room.triggerBotHunterShot(hunter);
+    }
+
+    // 15 giây cho Thợ săn chọn mục tiêu
+    this.startTimer(15, null, () => {
+      // Nếu hết giờ mà thợ săn chưa bắn thì tự động bỏ lỡ phát bắn
+      this.finishHunterTurn(null);
+    });
+  }
+
   // Vào Thảo Luận Ban Ngày (Day Discussion)
   enterDayDiscussion() {
     this.dayNumber++;
@@ -812,9 +868,9 @@ export class GameState {
     });
   }
 
-  // Người chơi bấm Skip thảo luận
+  // Người chơi bấm Skip thảo luận (Quản trò không tham gia vote skip)
   handleSkipDiscussion(player) {
-    if (this.phase !== PHASES.DAY_DISCUSSION || !player.isAlive) return;
+    if (this.phase !== PHASES.DAY_DISCUSSION || !player.isAlive || player.role === ROLES.MODERATOR) return;
 
     this.discussionSkipVotes.add(player.id);
 
@@ -856,7 +912,13 @@ export class GameState {
   }
 
   handleDayVote(player, targetId) {
-    if (this.phase !== PHASES.DAY_VOTING || !player.isAlive) return false;
+    if (this.phase !== PHASES.DAY_VOTING || !player.isAlive || player.role === ROLES.MODERATOR) return false;
+
+    // Không thể vote treo cổ Quản Trò
+    if (targetId !== 'skip') {
+      const target = this.getPlayer(targetId);
+      if (!target || !target.isAlive || target.role === ROLES.MODERATOR) return false;
+    }
 
     // targetId có thể là playerId hoặc 'skip'
     this.dayVotes[player.id] = targetId;

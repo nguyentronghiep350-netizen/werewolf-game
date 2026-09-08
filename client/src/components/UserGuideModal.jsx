@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, HelpCircle, Wifi, Users, Bot, Flame, Shield, Moon, Sun, Gavel, Sparkles, Zap, Heart, Sliders, CheckCircle2 } from 'lucide-react';
+import { X, HelpCircle, Wifi, Users, Bot, Flame, Shield, Moon, Sun, Gavel, Sparkles, Zap, Heart, Sliders, CheckCircle2, Crown, Volume2, Eye, Play, Pause, ChevronRight } from 'lucide-react';
 
 export default function UserGuideModal({ isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState('flow');
@@ -32,6 +32,7 @@ export default function UserGuideModal({ isOpen, onClose }) {
         <div className="flex border-b border-slate-800 bg-slate-950/40 px-4 pt-2 gap-2 overflow-x-auto text-xs font-semibold">
           {[
             { id: 'flow', label: 'Quy Trình Trận Đấu', icon: Moon },
+            { id: 'god_mode', label: 'Cách Chơi Quản Trò (God Mode)', icon: Crown },
             { id: 'modes', label: 'Các Chế Độ Chơi', icon: Flame },
             { id: 'multiplayer', label: 'Chơi Cùng Bạn Bè (LAN / Web)', icon: Wifi },
             { id: 'bots', label: 'Tính Năng Bot AI', icon: Bot },
@@ -100,6 +101,80 @@ export default function UserGuideModal({ isOpen, onClose }) {
                     Mỗi người chọn 1 kẻ khả nghi nhất hoặc "Bỏ phiếu trắng". Người có số phiếu cao nhất sẽ bị đưa lên giàn treo cổ (nếu treo trúng Kẻ Chán Đời Jester, Jester sẽ thắng ngay!).
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: GOD MODE & QUẢN TRÒ */}
+          {activeTab === 'god_mode' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-amber-300 flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-amber-400" />
+                  Hướng Dẫn Cách Chơi & Quyền Năng Quản Trò (God Mode)
+                </h3>
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-600 font-bold">
+                  Dành Riêng Cho Chủ Phòng / Trọng Tài
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-gradient-to-r from-amber-950/70 to-slate-900 border border-amber-500/50 rounded-2xl text-xs space-y-1.5">
+                <p className="text-white font-bold">
+                  🌟 Quản Trò (Game Master) là ai?
+                </p>
+                <p className="text-slate-300 leading-relaxed">
+                  Khi bật chế độ <strong>"Quản Trò Người Thật"</strong>, Chủ phòng sẽ đứng ngoài làm trọng tài và người dẫn chuyện của ngôi làng. Bạn <strong>không bị chia bài làm dân hay sói</strong>, <strong>không bị người chơi hay bầy sói sát hại</strong>, và nắm giữ <strong>Bảng Quản Trò Toàn Năng (God Mode)</strong> để làm chủ toàn bộ ván đấu.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-800/70 p-3.5 rounded-2xl border border-amber-500/30 space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-400 font-bold text-sm">
+                    <Eye className="w-4 h-4" />
+                    <span>1. Thần Nhìn Thấu (God Roster & Live Intel)</span>
+                  </div>
+                  <p className="text-slate-400">
+                    - Nhìn thấy bài thật 100% của tất cả người chơi trong làng.<br />
+                    - Trực quan hóa thời gian thực ban đêm: Sói đang cắn ai, Bảo Vệ đang giữ ai, Tiên Tri vừa soi ai, Phù Thủy dùng bình cứu/độc lên ai.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/70 p-3.5 rounded-2xl border border-indigo-500/30 space-y-1">
+                  <div className="flex items-center gap-1.5 text-indigo-400 font-bold text-sm">
+                    <Volume2 className="w-4 h-4" />
+                    <span>2. Kịch Bản Thoại AI & Giọng Đọc Tự Động</span>
+                  </div>
+                  <p className="text-slate-400">
+                    - Có sẵn kịch bản lời thoại dẫn chuyện tiếng Việt cực kỳ truyền cảm.<br />
+                    - Bấm <strong>"🔊 Đọc Hộ Tôi"</strong> để máy tự phát âm thanh dẫn chuyện chuẩn xác, hoặc bạn có thể tự đọc qua Voice Chat.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/70 p-3.5 rounded-2xl border border-cyan-500/30 space-y-1">
+                  <div className="flex items-center gap-1.5 text-cyan-400 font-bold text-sm">
+                    <Play className="w-4 h-4" />
+                    <span>3. Điều Phối Thời Gian & Lượt Tuần Tự</span>
+                  </div>
+                  <p className="text-slate-400">
+                    - Nút <strong>"Tạm Dừng / Chạy Giờ"</strong> (Pause Timer): Tha hồ dừng đồng hồ để đọc truyện hoặc giải quyết tranh cãi.<br />
+                    - Nút <strong>"Chuyển Sang Vai Trò Tiếp Theo"</strong>: Gọi từng vai trò (Cupid ➔ Bảo Vệ ➔ Sói ➔ Tiên Tri ➔ Phù Thủy) theo ý muốn.
+                  </p>
+                </div>
+
+                <div className="bg-slate-800/70 p-3.5 rounded-2xl border border-rose-500/30 space-y-1">
+                  <div className="flex items-center gap-1.5 text-rose-400 font-bold text-sm">
+                    <Crown className="w-4 h-4" />
+                    <span>4. Quyền Năng Tối Thượng (Kill & Revive)</span>
+                  </div>
+                  <p className="text-slate-400">
+                    - Trong tab "Thần Nhìn Thấu", Quản trò có thể bấm <strong>"Xử Tử"</strong> hoặc <strong>"Hồi Sinh"</strong> bất kỳ người chơi nào ngay lập tức.<br />
+                    - Chuyển thẳng sang Đêm / Ngày / Bỏ Phiếu bất kỳ lúc nào chỉ với 1 click.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs text-slate-400">
+                💡 <strong>Mẹo:</strong> Nếu muốn tham gia chơi game bình thường như các bạn bè khác, ở sảnh chờ bạn chỉ cần chọn chế độ <strong>"Quản Trò Tự Động (AI Moderator)"</strong>. Khi đó hệ thống AI sẽ tự làm quản trò và chia bài cho bạn!
               </div>
             </div>
           )}

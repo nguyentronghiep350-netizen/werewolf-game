@@ -41,14 +41,14 @@ export class BotAI {
   // Hành động ban đêm của Bot theo từng vai trò được gọi
   triggerNightActionForRole(activeRole) {
     const gameState = this.room.gameState;
-    const botPlayers = this.room.players.filter((p) => p.isAlive && p.isBot);
+    const botPlayers = this.room.players.filter((p) => p.isAlive && p.isBot && p.role !== ROLES.MODERATOR);
 
     setTimeout(() => {
       // 1. Bot Cupid
       if (activeRole === ROLES.CUPID) {
         const botCupid = botPlayers.find((p) => p.role === ROLES.CUPID && gameState.nightNumber === 1);
         if (botCupid) {
-          const candidates = this.room.players.filter((p) => p.isAlive);
+          const candidates = gameState.getAlivePlayers();
           if (candidates.length >= 2) {
             const shuffled = [...candidates].sort(() => 0.5 - Math.random());
             gameState.handleNightAction(botCupid, {
@@ -64,8 +64,8 @@ export class BotAI {
       if (activeRole === ROLES.BODYGUARD) {
         const botBodyguard = botPlayers.find((p) => p.role === ROLES.BODYGUARD);
         if (botBodyguard) {
-          const aliveOthers = this.room.players.filter(
-            (p) => p.isAlive && p.id !== botBodyguard.lastProtectedId
+          const aliveOthers = gameState.getAlivePlayers().filter(
+            (p) => p.id !== botBodyguard.lastProtectedId
           );
           if (aliveOthers.length > 0) {
             const target = aliveOthers[Math.floor(Math.random() * aliveOthers.length)];
@@ -81,9 +81,9 @@ export class BotAI {
       if (activeRole === 'werewolf' || activeRole === ROLES.WEREWOLF) {
         const botWolves = botPlayers.filter((p) => isWerewolfRole(p.role));
         if (botWolves.length > 0) {
-          const nonWolves = this.room.players.filter((p) => p.isAlive && !isWerewolfRole(p.role));
+          const nonWolves = gameState.getAlivePlayers().filter((p) => !isWerewolfRole(p.role));
           if (nonWolves.length > 0) {
-            // Chọn công bằng giữa tất cả người chơi không phải sói (không săn người thật)
+            // Chọn công bằng giữa tất cả người chơi không phải sói (không săn người thật, không cắn Quản trò)
             const chosenTarget = nonWolves[Math.floor(Math.random() * nonWolves.length)];
 
             for (const wolf of botWolves) {
@@ -112,10 +112,9 @@ export class BotAI {
       if (activeRole === ROLES.SEER) {
         const botSeer = botPlayers.find((p) => p.role === ROLES.SEER);
         if (botSeer) {
-          const uninspected = this.room.players.filter(
-            (p) => p.isAlive && p.id !== botSeer.id && !this.seerHistory.has(p.id)
-          );
-          const candidates = uninspected.length > 0 ? uninspected : this.room.players.filter((p) => p.isAlive && p.id !== botSeer.id);
+          const aliveOthers = gameState.getAlivePlayers().filter((p) => p.id !== botSeer.id);
+          const uninspected = aliveOthers.filter((p) => !this.seerHistory.has(p.id));
+          const candidates = uninspected.length > 0 ? uninspected : aliveOthers;
           if (candidates.length > 0) {
             const target = candidates[Math.floor(Math.random() * candidates.length)];
             this.seerHistory.add(target.id);
@@ -140,7 +139,7 @@ export class BotAI {
           }
 
           if (!botWitch.witchKillUsed && gameState.nightNumber >= 3 && Math.random() < 0.4) {
-            const targets = this.room.players.filter((p) => p.isAlive && p.id !== botWitch.id && p.id !== victimId);
+            const targets = gameState.getAlivePlayers().filter((p) => p.id !== botWitch.id && p.id !== victimId);
             if (targets.length > 0) {
               killTargetId = targets[Math.floor(Math.random() * targets.length)].id;
             }
@@ -168,7 +167,7 @@ export class BotAI {
   // Bot Thợ Săn bắn trả thù
   triggerHunterShot(hunterPlayer) {
     setTimeout(() => {
-      const candidates = this.room.players.filter((p) => p.isAlive && p.id !== hunterPlayer.id);
+      const candidates = this.room.gameState.getAlivePlayers().filter((p) => p.id !== hunterPlayer.id);
       if (candidates.length > 0) {
         // Bắn người đáng nghi nhất
         const target = candidates[Math.floor(Math.random() * candidates.length)];
@@ -180,7 +179,7 @@ export class BotAI {
   // Bot chat thảo luận ban ngày
   triggerDayChatter() {
     const gameState = this.room.gameState;
-    const aliveBots = this.room.players.filter((p) => p.isAlive && p.isBot);
+    const aliveBots = gameState.getAlivePlayers().filter((p) => p.isBot);
     if (aliveBots.length === 0) return;
 
     // Chọn 1-3 bot phát biểu lần lượt
@@ -192,7 +191,7 @@ export class BotAI {
         if (gameState.phase !== 'DAY_DISCUSSION' || !bot.isAlive) return;
 
         let message = '';
-        const aliveOthers = this.room.players.filter((p) => p.isAlive && p.id !== bot.id);
+        const aliveOthers = gameState.getAlivePlayers().filter((p) => p.id !== bot.id);
         const randomOther = aliveOthers.length > 0 ? aliveOthers[Math.floor(Math.random() * aliveOthers.length)] : null;
 
         if (isWerewolfRole(bot.role)) {
@@ -235,7 +234,7 @@ export class BotAI {
   // Bot bỏ phiếu ban ngày
   triggerDayVotes() {
     const gameState = this.room.gameState;
-    const aliveBots = this.room.players.filter((p) => p.isAlive && p.isBot);
+    const aliveBots = gameState.getAlivePlayers().filter((p) => p.isBot);
 
     aliveBots.forEach((bot) => {
       // Delay ngẫu nhiên từ 3-10 giây để vote như người thật
@@ -243,7 +242,7 @@ export class BotAI {
       setTimeout(() => {
         if (gameState.phase !== 'DAY_VOTING' || !bot.isAlive) return;
 
-        const aliveOthers = this.room.players.filter((p) => p.isAlive && p.id !== bot.id);
+        const aliveOthers = gameState.getAlivePlayers().filter((p) => p.id !== bot.id);
         if (aliveOthers.length === 0) return;
 
         let targetId = 'skip';

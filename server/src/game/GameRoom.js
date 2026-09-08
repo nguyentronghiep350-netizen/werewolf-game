@@ -380,7 +380,8 @@ export class GameRoom {
       senderRole: !sender.isAlive ? sender.role : null,
       channel, // 'public' | 'werewolf' | 'dead'
       text: trimmed,
-      timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+      createdAt: Date.now(),
+      timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }),
     };
 
     this.chatMessages.push(message);

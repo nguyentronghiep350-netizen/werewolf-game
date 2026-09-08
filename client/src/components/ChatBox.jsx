@@ -114,18 +114,24 @@ export default function ChatBox({
             {activeTab === 'dead' && 'Nơi các linh hồn người chết tâm sự mà người sống không nghe thấy.'}
           </div>
         ) : (
-          filteredMessages.map((m) => (
-            <div key={m.id} className="flex items-start gap-2">
-              <span className="text-base p-0.5 rounded bg-slate-800 shrink-0">{m.senderAvatar}</span>
-              <div className="min-w-0 bg-slate-800/60 rounded-xl p-2 border border-slate-700/50 flex-1">
-                <div className="flex items-center justify-between gap-1 mb-0.5">
-                  <span className="font-bold text-slate-200 truncate">{m.senderName}</span>
-                  <span className="text-[10px] text-slate-500 shrink-0">{m.timestamp}</span>
+          filteredMessages.map((m) => {
+            const timeStr = m.createdAt
+              ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+              : m.timestamp || '';
+
+            return (
+              <div key={m.id} className="flex items-start gap-2">
+                <span className="text-base p-0.5 rounded bg-slate-800 shrink-0">{m.senderAvatar}</span>
+                <div className="min-w-0 bg-slate-800/60 rounded-xl p-2 border border-slate-700/50 flex-1">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className="font-bold text-slate-200 truncate">{m.senderName}</span>
+                    <span className="text-[10px] text-slate-500 shrink-0">{timeStr}</span>
+                  </div>
+                  <p className="text-slate-300 break-words leading-relaxed">{m.text}</p>
                 </div>
-                <p className="text-slate-300 break-words leading-relaxed">{m.text}</p>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>

@@ -98,6 +98,8 @@ export default function GameScreen({
     }
   }, [phase]);
 
+  const [adminSelectedPlayer, setAdminSelectedPlayer] = useState(null);
+
   // Đếm số người sống
   const alivePlayers = players.filter((p) => p.isAlive && p.role !== 'moderator');
   const aliveCount = alivePlayers.length;
@@ -106,7 +108,15 @@ export default function GameScreen({
 
   // Xử lý khi click vào 1 người chơi trên bàn cờ
   const handlePlayerClick = (p) => {
-    if (!p.isAlive) return;
+    // Nếu là Quản Trò, click để mở menu xem lá bài & xử lý nhanh
+    if (isHumanMod) {
+      if (p.role === 'moderator') return;
+      soundFx.playClick();
+      setAdminSelectedPlayer(p);
+      return;
+    }
+
+    if (!p.isAlive || p.role === 'moderator') return;
 
     // Trong ban đêm
     if (isMyNightTurn && !submittedNightAction) {
@@ -130,7 +140,7 @@ export default function GameScreen({
     }
 
     // Trong pha bỏ phiếu ban ngày
-    if (phase === 'DAY_VOTING' && isAlive && p.id !== myId) {
+    if (phase === 'DAY_VOTING' && isAlive && myRole !== 'moderator' && p.id !== myId) {
       soundFx.playClick();
       setSelectedTargetId(p.id);
       onDayVote(p.id);
@@ -289,37 +299,6 @@ export default function GameScreen({
         </div>
 
         {/* ========================================================================= */}
-        {/* QUẢN TRÒ THỦ CÔNG (CHỈ HIỆN KHI Ở CHẾ ĐỘ HUMAN MODERATOR) */}
-        {/* ========================================================================= */}
-        {isHumanMod && (
-          <div className="p-2.5 bg-gradient-to-r from-amber-950/90 via-slate-900 to-indigo-950/90 border border-amber-500/60 rounded-2xl flex items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-1.5 text-amber-300 font-bold">
-              <Crown className="w-4 h-4 text-amber-400" />
-              <span>Quản Trò</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onModeratorAction && onModeratorAction('toggle_pause_timer')}
-                className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold flex items-center gap-1 cursor-pointer text-xs"
-              >
-                {isTimerPaused ? <Play className="w-3 h-3 text-emerald-400 fill-current" /> : <Pause className="w-3 h-3 text-amber-400" />}
-                <span>{isTimerPaused ? 'Chạy Giờ' : 'Dừng Giờ'}</span>
-              </button>
-              {isNight && (
-                <button
-                  type="button"
-                  onClick={() => onModeratorAction && onModeratorAction('advance_night_step')}
-                  className="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black flex items-center gap-1 cursor-pointer text-xs shadow"
-                >
-                  <span>Chuyển Lượt ⏩</span>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
         {/* THÔNG BÁO RẠNG SÁNG (MORNING DEATH ANNOUNCEMENT) */}
         {/* ========================================================================= */}
         {phase === 'MORNING' && (
@@ -374,9 +353,10 @@ export default function GameScreen({
 
               const voice = voiceStates[p.id];
               const isSpeaking = voice?.isSpeaking;
+              const isModeratorPlayer = p.role === 'moderator';
 
-              // Cho phép click nếu còn sống và đang trong lượt chọn
-              const canClick = p.isAlive && (isMyNightTurn || (phase === 'DAY_VOTING' && isAlive && !isMe));
+              // Cho phép click nếu còn sống, không phải Quản trò và đang trong lượt chọn
+              const canClick = p.isAlive && !isModeratorPlayer && myRole !== 'moderator' && (isMyNightTurn || (phase === 'DAY_VOTING' && isAlive && !isMe));
 
               return (
                 <button
@@ -385,7 +365,9 @@ export default function GameScreen({
                   disabled={!canClick && !isMe}
                   onClick={() => handlePlayerClick(p)}
                   className={`p-2.5 rounded-2xl border transition-all duration-200 relative flex flex-col items-center text-center select-none ${
-                    isSelected
+                    isModeratorPlayer
+                      ? 'bg-gradient-to-b from-amber-950/60 to-slate-900 border-amber-500/80 shadow-lg shadow-amber-950/50 cursor-default ring-1 ring-amber-400/40'
+                      : isSelected
                       ? 'ring-4 ring-amber-400 bg-amber-950/60 border-amber-300 shadow-xl shadow-amber-950/80 scale-105 z-10'
                       : isSpeaking
                       ? 'ring-2 ring-emerald-400 bg-emerald-950/40 border-emerald-500 shadow-md'
@@ -429,8 +411,10 @@ export default function GameScreen({
                   </span>
 
                   {/* Role text if revealed */}
-                  {p.role === 'moderator' ? (
-                    <span className="text-[10px] font-bold text-amber-400 mt-0.5">👑 Quản Trò</span>
+                  {isModeratorPlayer ? (
+                    <span className="text-[10px] font-black text-amber-400 mt-0.5 flex items-center gap-0.5">
+                      <Crown className="w-3 h-3 text-amber-400 inline" /> Quản Trò
+                    </span>
                   ) : p.role ? (
                     <span className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: p.roleDetails?.color || '#38bdf8' }}>
                       {p.roleDetails?.name || p.role}
@@ -628,15 +612,80 @@ export default function GameScreen({
         />
       )}
 
-      {/* Thanh Vai Trò Ở Đáy Màn Hình */}
-      <div className="fixed bottom-0 left-0 right-0 z-20">
-        <RoleDrawer
-          myRole={myRole}
-          myRoleDetails={myRoleDetails}
-          isAlive={isAlive}
-          loverPartner={loverPartner}
-        />
-      </div>
+      {/* Admin Quick Action Modal Khi Quản Trò Click Vào Người Chơi Trên Bàn */}
+      {adminSelectedPlayer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl p-5 max-w-sm w-full shadow-2xl space-y-4 relative">
+            <button
+              onClick={() => setAdminSelectedPlayer(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <span className="text-4xl p-2 rounded-2xl bg-slate-800 border border-slate-700">{adminSelectedPlayer.avatar}</span>
+              <div className="min-w-0">
+                <h4 className="text-base font-black text-white truncate">{adminSelectedPlayer.name}</h4>
+                <div className="text-xs font-bold" style={{ color: adminSelectedPlayer.roleDetails?.color || '#38bdf8' }}>
+                  {adminSelectedPlayer.roleDetails?.name || adminSelectedPlayer.role || 'Chưa rõ vai trò'}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Trạng thái: {adminSelectedPlayer.isAlive ? <span className="text-emerald-400 font-bold">🟢 Còn sống</span> : <span className="text-rose-400 font-bold">💀 Đã chết</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* Thao Tác Can Thiệp Quản Trò */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+              {adminSelectedPlayer.isAlive ? (
+                <button
+                  onClick={() => {
+                    soundFx.playClick();
+                    onModeratorAction && onModeratorAction('kill', { targetId: adminSelectedPlayer.id });
+                    setAdminSelectedPlayer(null);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/60 cursor-pointer col-span-2"
+                >
+                  <Skull className="w-4 h-4" />
+                  <span>Xử Tử Ngay (Kill)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    soundFx.playClick();
+                    onModeratorAction && onModeratorAction('revive', { targetId: adminSelectedPlayer.id });
+                    setAdminSelectedPlayer(null);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/60 cursor-pointer col-span-2"
+                >
+                  <Heart className="w-4 h-4 fill-white" />
+                  <span>Hồi Sinh (Revive)</span>
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => setAdminSelectedPlayer(null)}
+              className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition cursor-pointer"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Thanh Vai Trò Ở Đáy Màn Hình (Chỉ hiện cho người chơi, ẩn với Quản trò) */}
+      {myRole !== 'moderator' && (
+        <div className="fixed bottom-0 left-0 right-0 z-20">
+          <RoleDrawer
+            myRole={myRole}
+            myRoleDetails={myRoleDetails}
+            isAlive={isAlive}
+            loverPartner={loverPartner}
+          />
+        </div>
+      )}
     </div>
   );
 }

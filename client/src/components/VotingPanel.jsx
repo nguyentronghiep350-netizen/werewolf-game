@@ -15,8 +15,9 @@ export default function VotingPanel({
   const [selectedCandidate, setSelectedCandidate] = useState('');
   const [hasVoted, setHasVoted] = useState(false);
 
-  const alivePlayers = players.filter((p) => p.isAlive);
+  const alivePlayers = players.filter((p) => p.isAlive && p.role !== 'moderator');
   const me = players.find((p) => p.id === myId);
+  const isModerator = me?.role === 'moderator';
 
   // Tính số lượng phiếu cho từng ứng viên
   const voteCounts = {};
@@ -49,7 +50,7 @@ export default function VotingPanel({
           </p>
         </div>
 
-        {isAlive && (
+        {isAlive && !isModerator && (
           <div className="flex items-center gap-3">
             <div className="text-right">
               <span className="text-xs text-slate-400 block">Bỏ qua thảo luận:</span>
@@ -72,6 +73,12 @@ export default function VotingPanel({
               <FastForward className="w-4 h-4" />
               {hasSkipped ? 'Đã Biểu Quyết Skip' : 'Bỏ Qua Thảo Luận'}
             </button>
+          </div>
+        )}
+
+        {isModerator && (
+          <div className="p-2.5 px-3 rounded-2xl bg-amber-950/60 border border-amber-500/50 text-amber-300 text-xs font-bold flex items-center gap-2">
+            <span>👑 Quản Trò đang lắng nghe dân làng tranh luận</span>
           </div>
         )}
       </div>
@@ -101,7 +108,12 @@ export default function VotingPanel({
           </span>
         </div>
 
-        {!isAlive ? (
+        {isModerator ? (
+          <div className="p-4 bg-amber-950/60 border border-amber-500/50 rounded-2xl text-center text-xs text-amber-300 font-semibold space-y-1">
+            <p className="text-sm font-bold">👑 Bạn là Quản Trò Toàn Năng (God Mode)</p>
+            <p className="text-slate-400">Bạn đứng ngoài giám sát lá phiếu của dân làng và không tham gia bỏ phiếu treo cổ.</p>
+          </div>
+        ) : !isAlive ? (
           <div className="p-4 bg-slate-800/40 rounded-2xl text-center text-xs text-slate-400">
             👻 Bạn đã chết nên không thể tham gia biểu quyết treo cổ.
           </div>
